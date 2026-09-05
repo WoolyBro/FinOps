@@ -20,7 +20,7 @@ tested first; the live model is connected once the tools are trustworthy.
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Strands agent, model provider, SQLite schema, client tools | done |
-| 2 | Invoice numbering, creation, retrieval, validation | done |
+| 2 | Invoice numbering, creation, retrieval, validation, amount parsing | done |
 | 3 | Invoice / receipt PDF generation | next |
 | 4 | Payments, balances, receipts | |
 | 5 | Overdue detection, reminders, financial summaries | |
@@ -28,7 +28,7 @@ tested first; the live model is connected once the tools are trustworthy.
 | 7 | FastAPI + Next.js UI, agent activity panel | |
 | 8 | AgentCore deployment, demo, evaluation | |
 
-49 tests pass with no credentials of any kind.
+103 tests pass with no credentials of any kind.
 
 ## Setup
 
@@ -87,6 +87,11 @@ a failed insert returns the number rather than leaving a gap in the sequence.
 **`amount_paid` is not a column.** It is `SUM(payments.amount_minor)`, computed
 on every read, so the stated balance and the payment ledger cannot disagree.
 
+**The model does no financial arithmetic.** `parse_amount` turns the user's own
+words -- "40k", "1.5 lakh", "Rs 40,000/-", "$250" -- into minor units in Python.
+The model passes the characters through; it never multiplies by 100 itself. Text
+holding two numbers, or no number, is refused rather than guessed at.
+
 **An identical invoice is flagged, not silently duplicated.** Same client, same
 project, same amount, same day returns `duplicate_suspected` with the existing
 invoice; the agent has to come back with `allow_duplicate=true` after asking.
@@ -107,6 +112,7 @@ app/
   config.py          paths and settings
   cli.py             terminal entry point
   tools/
+    amounts.py       parse_amount
     clients.py       find_client, create_client, list_clients, update_client
     invoices.py      create_invoice, get_invoice, list_invoices,
                      get_next_invoice_number
