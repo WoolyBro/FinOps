@@ -14,20 +14,8 @@ from strands import tool
 from app.config import INVOICE_PREFIX
 from app.database import get_db, next_counter, normalise_name
 from app.dates import InvalidDate, days_between, parse_date, today_iso
-from app.models import invoice_to_dict
+from app.models import INVOICE_SELECT, invoice_to_dict
 from app.money import InvalidAmount, normalise_currency, validate_amount_minor
-
-# Every invoice read goes through this so `amount_paid_minor` is always present
-# and always comes from the payment ledger rather than a stored column.
-INVOICE_SELECT = """
-SELECT i.*,
-       c.name AS client_name,
-       COALESCE((SELECT SUM(p.amount_minor)
-                   FROM payments p
-                  WHERE p.invoice_id = i.id), 0) AS amount_paid_minor
-  FROM invoices i
-  JOIN clients c ON c.id = i.client_id
-"""
 
 VALID_STATUSES = ("UNPAID", "PARTIALLY_PAID", "PAID", "CANCELLED")
 
@@ -280,3 +268,24 @@ def list_invoices(
         "invoices": invoices,
         "total_outstanding_minor": sum(i["outstanding_minor"] for i in invoices),
     }
+
+
+@tool
+def generate_invoice_pdf(invoice_id: int) -> dict:
+    """Generate (or regenerate) the PDF document for an invoice.
+
+    Every figure on the document is read from the database, so run this again
+    after a payment to refresh the balance shown on the page.
+
+    Args:
+        invoice_id: The numeric id of the invoice, from create_invoice or
+            get_invoice.
+
+    Returns:
+        status "created" with the pdf_path, "not_found" if there is no such
+        invoice, or "error" if the document could not be written. Do not tell
+        the user a document exists unless this returned "created".
+    """
+    from app.pdf_generator import create_invoice_pdf
+
+    return create_invoice_pdf(invoice_id)

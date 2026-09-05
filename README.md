@@ -21,14 +21,14 @@ tested first; the live model is connected once the tools are trustworthy.
 |---|---|---|
 | 1 | Strands agent, model provider, SQLite schema, client tools | done |
 | 2 | Invoice numbering, creation, retrieval, validation, amount parsing | done |
-| 3 | Invoice / receipt PDF generation | next |
-| 4 | Payments, balances, receipts | |
-| 5 | Overdue detection, reminders, financial summaries | |
-| 6 | Live Strands + Bedrock | |
-| 7 | FastAPI + Next.js UI, agent activity panel | |
-| 8 | AgentCore deployment, demo, evaluation | |
+| 2.8 | Deterministic invoice PDFs | done |
+| 3 | Payments, balances, receipts | next |
+| 4 | Overdue detection, reminders, financial summaries | |
+| 5 | Live Strands + Bedrock | |
+| 6 | FastAPI + Next.js UI, agent activity panel | |
+| 7 | AgentCore deployment, demo, evaluation | |
 
-103 tests pass with no credentials of any kind.
+183 tests pass with no credentials of any kind.
 
 ## Setup
 
@@ -97,7 +97,24 @@ project, same amount, same day returns `duplicate_suspected` with the existing
 invoice; the agent has to come back with `allow_duplicate=true` after asking.
 
 **The model never generates documents.** It calls a tool; deterministic Python
-renders the PDF. The LLM is the orchestrator, not the printer.
+renders the PDF. Layout, wording and every figure on the page are fixed code
+reading from SQLite. The LLM is the orchestrator, not the printer. PDF tests
+read the text back out of the generated file rather than trusting the return
+value, so a document that reports success but prints the wrong balance fails.
+
+**INR is written with Indian digit grouping** -- ₹1,50,000.00, not ₹150,000.00.
+Other currencies keep western grouping and their own decimal rules, so JPY
+prints ¥150,000 with no decimals. Formatting is integer arithmetic throughout;
+nothing rounds.
+
+**The rupee sign is absent from the PDF core fonts.** The generator locates and
+embeds a system font that carries U+20B9, searching Windows, Linux and macOS
+paths so a container build still renders correctly. If no such font exists it
+falls back to "Rs. " rather than printing a black box.
+
+**Document generation is a separate step from invoice creation.** A failed
+render cannot take an invoice down with it, and the agent is told never to
+claim a document exists unless `generate_invoice_pdf` returned "created".
 
 ## Layout
 
@@ -107,7 +124,8 @@ app/
   model_provider.py  Bedrock / Anthropic / Ollama selection
   database.py        SQLite schema, connections, counters
   models.py          row -> dict converters (what the model actually reads)
-  money.py           minor-unit validation and currency formatting
+  money.py           minor-unit validation, parsing and currency formatting
+  pdf_generator.py   deterministic invoice PDF rendering
   dates.py           ISO date parsing and derived overdue calculation
   config.py          paths and settings
   cli.py             terminal entry point
@@ -115,7 +133,9 @@ app/
     amounts.py       parse_amount
     clients.py       find_client, create_client, list_clients, update_client
     invoices.py      create_invoice, get_invoice, list_invoices,
-                     get_next_invoice_number
+                     get_next_invoice_number, generate_invoice_pdf
 tests/
-data/                SQLite database and generated documents (gitignored)
+data/                SQLite database (gitignored)
+  invoices/          generated invoice PDFs, named FF-0001.pdf
+  receipts/          generated receipts (phase 3)
 ```

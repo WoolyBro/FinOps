@@ -8,6 +8,21 @@ from __future__ import annotations
 
 import sqlite3
 
+# Every invoice read goes through this so `amount_paid_minor` is always present
+# and always comes from the payment ledger rather than a stored column.
+INVOICE_SELECT = """
+SELECT i.*,
+       c.name AS client_name,
+       c.email AS client_email,
+       c.phone AS client_phone,
+       c.address AS client_address,
+       COALESCE((SELECT SUM(p.amount_minor)
+                   FROM payments p
+                  WHERE p.invoice_id = i.id), 0) AS amount_paid_minor
+  FROM invoices i
+  JOIN clients c ON c.id = i.client_id
+"""
+
 
 def client_to_dict(row: sqlite3.Row) -> dict:
     return {

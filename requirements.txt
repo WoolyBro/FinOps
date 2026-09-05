@@ -1,4 +1,8 @@
 strands-agents[anthropic]>=1.54
 strands-agents-tools>=0.8
 python-dotenv>=1.0
+reportlab>=4.0
+
+# tests
 pytest>=8.0
+pypdf>=5.0
