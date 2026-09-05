@@ -14,8 +14,8 @@ decides *what* to do; Python does it.
 
 ## Status
 
-**Phases 1-2 complete.** The deterministic business layer is being built and
-tested first; the live model is connected once the tools are trustworthy.
+**Phases 1-4 complete.** The deterministic business layer was built and tested
+first; the live model gets connected only now that the tools are trustworthy.
 
 | Phase | Scope | State |
 |---|---|---|
@@ -24,12 +24,14 @@ tested first; the live model is connected once the tools are trustworthy.
 | 2.8 | Deterministic invoice PDFs | done |
 | 3 | Payments, balances, status transitions, receipts | done |
 | 4 | Overdue detection, reminders, financial summaries | done |
-| 5 | Live Strands + Bedrock | next |
+| 5 | Live Strands + Bedrock | harness ready, awaiting credentials |
 | 6 | FastAPI + Next.js UI, agent activity panel | |
 | 7 | AgentCore deployment, demo, evaluation | |
 
-321 tests pass with no credentials of any kind. 21 tools are registered with
-the agent; none of them has yet been called by a real model -- that is Phase 5.
+335 tests pass with no credentials of any kind. 21 tools are registered with
+the agent. The agent loop itself is proven offline against a scripted model
+(`tests/test_agent_loop.py`); what remains unproven is whether a *real* model
+chooses the right tools, which is what `pytest -m live` measures.
 
 ## Setup
 
@@ -42,18 +44,49 @@ cp .env.example .env
 
 ### Choosing a model provider
 
-`app/model_provider.py` resolves the provider at runtime so the deterministic
-half of the app is developable before AWS access lands.
+FreelanceFlow runs Claude on **Amazon Bedrock**. It does not use the Anthropic
+API, and nothing in the app requires an `ANTHROPIC_API_KEY` — a key being
+present in the environment changes nothing, and there is a test asserting that.
 
 | `FF_MODEL_PROVIDER` | Uses | Needs |
 |---|---|---|
-| `auto` (default) | Bedrock if AWS credentials resolve, else Anthropic | either of the below |
-| `bedrock` | Amazon Bedrock | `aws configure` + Claude model access in the Bedrock console |
-| `anthropic` | Anthropic API directly | `ANTHROPIC_API_KEY` |
-| `ollama` | Local Ollama | Ollama running on `localhost:11434` |
+| `auto` (default) | Bedrock if AWS credentials resolve, else Ollama if it is running | one of the two below |
+| `bedrock` | Claude on Amazon Bedrock — **production** | `aws configure` + Claude enabled under Bedrock → Model access |
+| `ollama` | A local model — **development without AWS** | Ollama running on `localhost:11434` |
 
-Nothing outside `model_provider.py` knows which one is in use, so switching to
-Bedrock for the final submission is a one-line env change.
+`auto` probes for Ollama with a half-second socket check. Asking for a provider
+explicitly skips that probe, so a slow Ollama start-up is never mistaken for a
+missing install.
+
+Nothing outside `model_provider.py` knows which one is in use, which is what
+keeps the eventual AgentCore deployment a configuration change rather than a
+rewrite.
+
+### Setting up Bedrock
+
+Four steps, all on your side — none of them can be scripted from here, because
+they need your AWS account.
+
+1. **Create an IAM user** with programmatic access and the
+   `AmazonBedrockFullAccess` policy (or, more tightly,
+   `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`).
+2. **Request model access** in the Bedrock console → *Model access* → enable
+   **Anthropic Claude**. This is the step people forget; credentials alone are
+   not enough, and access can take a few minutes to activate.
+3. **Install the AWS CLI and configure it** (`aws configure`), or put the
+   credentials in your environment. `model_provider.py` resolves whatever
+   botocore can find, so a profile, an SSO session or env vars all work.
+4. **Pick a region that has the model** — `us-east-1` is the safe default and
+   what `AWS_REGION` falls back to.
+
+Verify it resolved:
+
+```bash
+python -c "from app.model_provider import resolve_provider; print(resolve_provider())"
+```
+
+That should print `bedrock`. If it raises, the message names both paths —
+Bedrock and Ollama — and what each one needs.
 
 ## Running
 
@@ -61,8 +94,37 @@ Bedrock for the final submission is a one-line env change.
 python -m app.cli --init-db           # create the database
 python -m app.cli                     # interactive session
 python -m app.cli "Add a client called Rahul Sharma"
-pytest -q                             # tool tests, no credentials needed
 ```
+
+## Tests
+
+The deterministic suite needs no credentials and spends nothing:
+
+```bash
+pytest -q                             # 335 tests, live ones skipped
+```
+
+Live tests call a real model and cost money, so they are opt-in:
+
+```bash
+pytest -m live                        # the 11 live-model tests
+pytest -m live -k payment             # just one of them
+```
+
+To watch the loop by hand rather than through pytest — this prints the tool
+chain the model chose, which is the thing worth looking at:
+
+```bash
+python -m app.live_check --scenario balance     # the two-tool loop
+python -m app.live_check --scenario payment     # a real mutation
+python -m app.live_check --scenario ambiguous   # two Rahuls; must ask
+python -m app.live_check --scenario missing     # no amount given; must ask
+python -m app.live_check --scenario shorthand   # "40k" must go via parse_amount
+python -m app.live_check --scenario unknown     # no such client; must not invent
+python -m app.live_check --scenario payment --full   # all 21 tools available
+```
+
+Each run uses a scratch database, so smoke tests never touch real records.
 
 ## Design decisions
 
@@ -171,6 +233,19 @@ the message text all come from `invoice_to_dict` -- the model never edits a
 figure into the wording. A reminder only reaches `APPROVED` through
 `approve_reminder`; there is no send capability at all yet, deliberately.
 
+**The agent loop is tested separately from the model's judgement.**
+`tests/scripted_model.py` is a Strands model with canned replies, so the loop --
+hooks, tool execution, results fed back into the conversation, tracing -- is
+proven offline with no credentials and no spend. The live tests then measure
+only the thing that actually needs a real model: whether it picks the right
+tools. Without that split, a failing live test is ambiguous between "the model
+chose badly" and "our wiring is broken".
+
+**Live tests assert on the tool chain, not the prose.** `ToolTracer` records
+every call, its arguments and its result, and the live tests check those plus
+the resulting database state. A fluent paragraph built on a skipped lookup or
+an invented id is a failure that reads like a success.
+
 **A reminder keeps one active draft per invoice.** Calling
 `create_payment_reminder` again while a `DRAFT` or `APPROVED` reminder already
 exists returns that reminder instead of writing a duplicate; `force=true` after
@@ -190,6 +265,8 @@ app/
   dates.py           ISO date parsing and derived overdue calculation
   config.py          paths and settings
   cli.py             terminal entry point
+  live_check.py      manual live-model smoke test, prints the tool chain
+  tracing.py         records which tools the model chose, and with what
   tools/
     amounts.py       parse_amount
     clients.py       find_client, create_client, list_clients, update_client
@@ -202,6 +279,9 @@ app/
     reminders.py     create_payment_reminder, approve_reminder,
                      list_reminders
 tests/
+  scripted_model.py  a Strands model with canned replies, for offline loop tests
+  test_agent_loop.py the loop and tracer, proven without credentials
+  test_agent_live.py real-model tests, skipped unless `-m live`
 data/                SQLite database (gitignored)
   invoices/          generated invoice PDFs, named FF-0001.pdf
   receipts/          generated receipts, named RC-0001.pdf
