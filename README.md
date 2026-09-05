@@ -29,9 +29,10 @@ needs AWS credentials.
 | 5 | Live Strands + Bedrock | harness ready, awaiting credentials |
 | 6 | FastAPI + Next.js UI, agent activity panel | done |
 | 7 | AgentCore Runtime deployment | done (deploy blocked on AWS credentials) |
-| 8 | Storage durability, demo, evaluation | |
+| 8 | Live Bedrock validation | harness ready, **awaiting AWS credentials** |
+| 9 | Production hardening (storage durability, cost control) | |
 
-428 tests pass with no credentials of any kind. 21 tools are registered with
+444 tests pass with no credentials of any kind. 21 tools are registered with
 the agent. The agent loop itself is proven offline against a scripted model
 (`tests/test_agent_loop.py`); what remains unproven is whether a *real* model
 chooses the right tools, which is what `pytest -m live` measures.
@@ -132,30 +133,94 @@ python -m app.cli "Add a client called Rahul Sharma"
 The deterministic suite needs no credentials and spends nothing:
 
 ```bash
-pytest -q                             # 428 tests, live ones skipped
+pytest -q                             # 444 tests, live ones skipped
 ```
 
-Live tests call a real model and cost money, so they are opt-in:
+## Live validation against Bedrock
+
+> **These calls cost AWS credits.** One run is one conversation, which the
+> agent may take several model calls to finish. Preflight is free. Keep live
+> runs deliberate and few.
+
+### Environment
+
+| Variable | Required for | Value |
+|---|---|---|
+| `FF_AWS_REGION` | Bedrock | The region. No default — see below. |
+| `FF_MODEL_PROVIDER` | optional | `bedrock`, `ollama`, or `auto` (default) |
+| `FF_MODEL_ID` | optional | Overrides the model. Default below. |
+| `AWS_PROFILE` / `AWS_ACCESS_KEY_ID` … | Bedrock | Standard AWS credential chain |
+| `OLLAMA_HOST` | Ollama | Defaults to `http://localhost:11434` |
+
+- **Region:** `ap-south-1` (Mumbai) is suggested — the product bills in rupees,
+  so keeping inference in-region helps latency and data residency. **Verify the
+  model is actually enabled there before committing to it**; model access is
+  granted per region, and that check decides the region, not preference.
+- **Model:** `global.anthropic.claude-sonnet-4-6` (a global inference profile).
+- **Credentials come from the AWS credential chain only.** Never put them in
+  `.env`, in the repository, or in any file this project reads.
+
+### Prerequisites
+
+1. An AWS account with credentials configured (`aws configure`, a profile, or
+   an SSO session).
+2. Claude model access **enabled in your chosen region** — Bedrock console →
+   Model access. This is the step people miss.
+3. `FF_AWS_REGION` exported.
+
+### Check before spending anything
 
 ```bash
-pytest -m live                        # the 11 live-model tests
-pytest -m live -k payment             # just one of them
+python -m app.live_check --preflight
 ```
 
-To watch the loop by hand rather than through pytest — this prints the tool
-chain the model chose, which is the thing worth looking at:
+Free: it calls no model and no AWS API. It verifies credentials resolve, the
+region is explicit, the provider resolves to the one you asked for, and that no
+Anthropic key is being read. On failure it names each missing prerequisite with
+its fix and exits 2 without spending.
+
+### Telling Bedrock and Ollama apart
+
+Every run prints the provider, model and region it used, and `--provider` is
+**enforced**:
 
 ```bash
-python -m app.live_check --scenario balance     # the two-tool loop
-python -m app.live_check --scenario payment     # a real mutation
+python -m app.live_check --scenario balance                  # requires bedrock
+python -m app.live_check --scenario balance --provider ollama  # requires ollama
+```
+
+A run that asks for Bedrock will **refuse** rather than fall back to Ollama —
+a pass from the wrong provider proves nothing about the one being validated.
+There is a test for that.
+
+### The scenarios
+
+Run them in this order; do not go further if an earlier one fails.
+
+```bash
+python -m app.live_check --scenario balance     # 1. a read. Does it call a tool at all?
+python -m app.live_check --scenario payment     # 2. a real mutation
+python -m app.live_check --scenario unknown     # 3. no such client; must not invent
 python -m app.live_check --scenario ambiguous   # two Rahuls; must ask
 python -m app.live_check --scenario missing     # no amount given; must ask
 python -m app.live_check --scenario shorthand   # "40k" must go via parse_amount
-python -m app.live_check --scenario unknown     # no such client; must not invent
 python -m app.live_check --scenario payment --full   # all 21 tools available
 ```
 
-Each run uses a scratch database, so smoke tests never touch real records.
+Each prints the database before and after, the exact tool calls with arguments,
+and the reply — so you can check the answer came from the ledger rather than
+from the model. A financial reply with **no tool calls** is a hallucination, and
+the output says so explicitly.
+
+Each run uses a scratch database, so live checks never touch real records.
+
+```bash
+pytest -m live                        # the 11 live-model tests, opt-in
+```
+
+**Status: not yet run.** The harness is complete and tested; no live Bedrock
+call has been made from this repository, because no AWS credentials are
+configured on this machine.
 
 ## Deployment
 
