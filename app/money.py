@@ -24,6 +24,14 @@ CURRENCIES: dict[str, tuple[str, int]] = {
     "JPY": ("¥", 0),
 }
 
+# Currencies written with Indian digit grouping -- 1,50,000 rather than 150,000.
+INDIAN_GROUPING = {"INR"}
+
+# Fallbacks for outputs that cannot render the currency symbol. The rupee sign
+# is absent from the PDF core fonts, so invoices fall back to "Rs. " when no
+# embeddable font on the machine carries U+20B9.
+ASCII_SYMBOLS: dict[str, str] = {"INR": "Rs. "}
+
 # A sanity ceiling. Nothing legitimate for a freelancer exceeds this, and it
 # catches an amount that arrived already multiplied by 100 twice over.
 MAX_AMOUNT_MINOR = 10_000_000_000  # 100 million major units
@@ -118,11 +126,56 @@ def validate_amount_minor(amount_minor) -> int:
     return amount_minor
 
 
-def format_money(amount_minor: int, currency: str = "INR") -> str:
-    """Render minor units as a display string, e.g. 4000000 -> 'Rs 40,000.00'."""
-    symbol, exponent = CURRENCIES.get(currency.upper(), (f"{currency.upper()} ", 2))
-    value = Decimal(int(amount_minor)) / (Decimal(10) ** exponent)
-    return f"{symbol}{value:,.{exponent}f}"
+def group_indian(digits: str) -> str:
+    """Group digits the Indian way: last three, then pairs.
+
+    12550000 -> '1,25,50,000'. This is how an invoice reads in India, and it is
+    a formatting decision, not something the model gets a say in.
+    """
+    if len(digits) <= 3:
+        return digits
+    head, tail = digits[:-3], digits[-3:]
+    parts: list[str] = []
+    while len(head) > 2:
+        parts.insert(0, head[-2:])
+        head = head[:-2]
+    if head:
+        parts.insert(0, head)
+    return ",".join(parts + [tail])
+
+
+def format_money(
+    amount_minor: int, currency: str = "INR", ascii_symbol: bool = False
+) -> str:
+    """Render minor units as a display string.
+
+    4000000 INR  -> '₹40,000.00'
+    15000000 INR -> '₹1,50,000.00'   (Indian grouping)
+    15000000 USD -> '$150,000.00'         (western grouping)
+    150000 JPY   -> '¥150,000'       (no minor unit)
+
+    Set ascii_symbol when the output goes somewhere the rupee sign cannot be
+    rendered, and 'Rs. ' is used instead.
+    """
+    currency = currency.upper()
+    symbol, exponent = CURRENCIES.get(currency, (f"{currency} ", 2))
+    if ascii_symbol:
+        symbol = ASCII_SYMBOLS.get(currency, symbol)
+
+    # Integer arithmetic throughout -- no float or Decimal division, so there is
+    # nothing to round.
+    value = int(amount_minor)
+    sign = "-" if value < 0 else ""
+    value = abs(value)
+    unit = 10**exponent
+    whole, fraction = divmod(value, unit)
+
+    digits = str(whole)
+    grouped = group_indian(digits) if currency in INDIAN_GROUPING else f"{whole:,}"
+
+    if exponent == 0:
+        return f"{sign}{symbol}{grouped}"
+    return f"{sign}{symbol}{grouped}.{fraction:0{exponent}d}"
 
 
 def detect_currency(text: str) -> str | None:

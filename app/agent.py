@@ -17,6 +17,7 @@ from app.tools.clients import (
 )
 from app.tools.invoices import (
     create_invoice,
+    generate_invoice_pdf,
     get_invoice,
     get_next_invoice_number,
     list_invoices,
@@ -35,6 +36,8 @@ TOOLS = [
     get_invoice,
     list_invoices,
     get_next_invoice_number,
+    # Documents
+    generate_invoice_pdf,
 ]
 
 
@@ -81,6 +84,11 @@ Rules you must not break:
 
 8. If a tool returns duplicate_suspected, stop and ask. Do not retry with
    allow_duplicate until the user has confirmed they want a second invoice.
+
+9. After creating an invoice, call generate_invoice_pdf to produce the document,
+   and tell the user where it was saved. Only say the document exists if that
+   tool returned "created". Regenerate it after a payment so the balance on the
+   page matches the ledger.
 
 Style: be brief and concrete. Confirm what you did with the actual figures and
 document numbers from the tool results, not a restatement of the request.

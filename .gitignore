@@ -4,4 +4,6 @@ __pycache__/
 .env
 data/*.db
 data/documents/
+data/invoices/
+data/receipts/
 .pytest_cache/
