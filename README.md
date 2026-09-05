@@ -25,10 +25,10 @@ first; the live model gets connected only now that the tools are trustworthy.
 | 3 | Payments, balances, status transitions, receipts | done |
 | 4 | Overdue detection, reminders, financial summaries | done |
 | 5 | Live Strands + Bedrock | harness ready, awaiting credentials |
-| 6 | FastAPI + Next.js UI, agent activity panel | |
+| 6 | FastAPI + Next.js UI, agent activity panel | done |
 | 7 | AgentCore deployment, demo, evaluation | |
 
-335 tests pass with no credentials of any kind. 21 tools are registered with
+394 tests pass with no credentials of any kind. 21 tools are registered with
 the agent. The agent loop itself is proven offline against a scripted model
 (`tests/test_agent_loop.py`); what remains unproven is whether a *real* model
 chooses the right tools, which is what `pytest -m live` measures.
@@ -90,6 +90,25 @@ Bedrock and Ollama — and what each one needs.
 
 ## Running
 
+### The application
+
+Two processes. The browser never talks to Strands.
+
+```
+Browser -> Next.js -> FastAPI -> AgentService -> Strands -> tools -> SQLite
+```
+
+```bash
+uvicorn app.api.main:app --reload --port 8000   # API on :8000, docs at /docs
+cd frontend && npm install && npm run dev       # dashboard on :3000
+```
+
+The dashboard reads records whether or not a model is configured. When no
+provider is reachable the agent panel shows the configuration state and
+disables the composer, rather than answering with something no model produced.
+
+### The CLI
+
 ```bash
 python -m app.cli --init-db           # create the database
 python -m app.cli                     # interactive session
@@ -101,7 +120,7 @@ python -m app.cli "Add a client called Rahul Sharma"
 The deterministic suite needs no credentials and spends nothing:
 
 ```bash
-pytest -q                             # 335 tests, live ones skipped
+pytest -q                             # 394 tests, live ones skipped
 ```
 
 Live tests call a real model and cost money, so they are opt-in:
@@ -252,6 +271,32 @@ exists returns that reminder instead of writing a duplicate; `force=true` after
 the user asks for a second one is the only way past it. A `CANCELLED` reminder
 doesn't block a new draft.
 
+**The browser never talks to Strands.** The frontend calls FastAPI, which calls
+an `AgentService`, which is the only thing in the codebase that constructs an
+Agent or invokes a model. Route handlers do not import Strands. Moving the agent
+to AgentCore later is a change to one service, not to the interface.
+
+**The API declares its own encoding.** The CLI fixes its stdout, but that is a
+property of a terminal process and says nothing about HTTP. `UTF8JSONResponse`
+sets `charset=utf-8` explicitly and there is a test asserting the raw ₹ bytes
+arrive over the wire, rather than trusting a framework default to stay put.
+
+**Every failure has the same shape:** `{"error": code, "detail": text}`. A 404
+from a handler, a validation failure and an unhandled exception all come back
+looking alike, so the frontend has one thing to read instead of three.
+
+**The agent being down does not take the dashboard with it.** Records, reports
+and documents are served entirely from SQLite. `/api/chat` returns 503 with the
+reason when no provider is configured — never a plausible reply. There are tests
+for both halves of that.
+
+**A GET may render a document, and that is deliberate.** `/invoices/{id}/pdf`
+generates the file if it is missing. Rendering is idempotent and derives every
+figure from the database, so it changes no business state — it only ensures the
+document matching current state exists. Receipts go further: a payment keeps one
+receipt number for life, so repeated GETs return the same document rather than
+issuing a second receipt.
+
 ## Layout
 
 ```
@@ -278,6 +323,14 @@ app/
                      get_client_balance, get_financial_summary
     reminders.py     create_payment_reminder, approve_reminder,
                      list_reminders
+  services/
+    agent_service.py the only thing that invokes Strands
+    data_service.py  read access for the dashboard
+  api/
+    main.py          app factory, CORS, one error shape for every failure
+    responses.py     UTF-8 JSON, charset declared
+    routers/         chat, records, reports
+frontend/            Next.js dashboard and agent panel
 tests/
   scripted_model.py  a Strands model with canned replies, for offline loop tests
   test_agent_loop.py the loop and tracer, proven without credentials
