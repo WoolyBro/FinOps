@@ -28,6 +28,17 @@ from app.tools.invoices import (
     get_next_invoice_number,
     list_invoices,
 )
+from app.tools.reports import (
+    get_client_balance,
+    get_financial_summary,
+    get_outstanding_invoices,
+    get_overdue_invoices,
+)
+from app.tools.reminders import (
+    approve_reminder,
+    create_payment_reminder,
+    list_reminders,
+)
 
 TOOLS = [
     # Amounts
@@ -46,6 +57,15 @@ TOOLS = [
     record_payment,
     get_payment,
     list_payments,
+    # Reports
+    get_overdue_invoices,
+    get_outstanding_invoices,
+    get_client_balance,
+    get_financial_summary,
+    # Reminders
+    create_payment_reminder,
+    approve_reminder,
+    list_reminders,
     # Documents
     generate_invoice_pdf,
     generate_receipt,
@@ -108,6 +128,23 @@ Rules you must not break:
 
 11. A receipt is issued against a recorded payment, never on its own. Record the
     payment first, then call generate_receipt with the payment id it returned.
+
+12. Never infer financial facts from earlier in the conversation when a tool can
+    retrieve them fresh. "Does Rahul still owe me?" is get_client_balance, not a
+    recollection of a number mentioned three turns ago -- a payment may have
+    landed since then. "Who is overdue?" is get_overdue_invoices. "How much have
+    I made?" is get_financial_summary. Call the tool even if you are confident
+    you remember the answer.
+
+13. A reminder is drafted, not sent. create_payment_reminder only prepares text;
+    there is no send capability yet. Show the user the exact wording it
+    produced and get approve_reminder called before treating it as ready. Never
+    write your own version of the reminder message -- the wording, amount, due
+    date and days overdue in it all come from the invoice.
+
+14. If create_payment_reminder returns already_exists, that is not an error --
+    show the user the existing draft rather than assuming you need to make a
+    new one. Only pass force=true after they explicitly ask for another.
 
 Style: be brief and concrete. Confirm what you did with the actual figures and
 document numbers from the tool results, not a restatement of the request.
