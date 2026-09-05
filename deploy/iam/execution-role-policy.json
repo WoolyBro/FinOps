@@ -1,0 +1,116 @@
+{
+  "_comment": [
+    "Least-privilege execution role for the FreelanceFlow AgentCore Runtime.",
+    "Replace REGION, ACCOUNT_ID and AGENT_NAME before use.",
+    "",
+    "Scoped deliberately: no bedrock:* and no bedrock-agentcore:*. The two",
+    "wildcards that remain are required by the services themselves -- X-Ray",
+    "does not support resource-level permissions, and logs:DescribeLogGroups",
+    "must be able to enumerate before it can filter.",
+    "",
+    "The ECRImageAccess statement is only needed for the Container build type.",
+    "Delete it if you deploy with CodeZip, which is the CLI default.",
+    "",
+    "GetWorkloadAccessToken* from the AWS reference policy is omitted: this",
+    "agent does not use AgentCore Identity. Add it only if you adopt OAuth",
+    "inbound auth or outbound credential providers."
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BedrockModelInvocation",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6*",
+        "arn:aws:bedrock:REGION:ACCOUNT_ID:inference-profile/global.anthropic.claude-sonnet-4-6"
+      ]
+    },
+    {
+      "Sid": "CreateAndDescribeLogGroups",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": [
+        "arn:aws:logs:REGION:ACCOUNT_ID:log-group:/aws/bedrock-agentcore/runtimes/*"
+      ]
+    },
+    {
+      "Sid": "EnumerateLogGroups",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups"
+      ],
+      "Resource": [
+        "arn:aws:logs:REGION:ACCOUNT_ID:log-group:*"
+      ]
+    },
+    {
+      "Sid": "WriteLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:REGION:ACCOUNT_ID:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*"
+      ]
+    },
+    {
+      "Sid": "LogResourcePolicyForThisAgent",
+      "Effect": "Allow",
+      "Action": [
+        "logs:PutResourcePolicy"
+      ],
+      "Resource": [
+        "arn:aws:logs:REGION:ACCOUNT_ID:log-group:/aws/bedrock-agentcore/runtimes/AGENT_NAME-*"
+      ]
+    },
+    {
+      "Sid": "XRayTracing",
+      "Effect": "Allow",
+      "Action": [
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords",
+        "xray:GetSamplingRules",
+        "xray:GetSamplingTargets"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AgentCoreMetricsOnly",
+      "Effect": "Allow",
+      "Action": "cloudwatch:PutMetricData",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "cloudwatch:namespace": "bedrock-agentcore"
+        }
+      }
+    },
+    {
+      "Sid": "ECRImageAccessContainerBuildsOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchGetImage",
+        "ecr:GetDownloadUrlForLayer"
+      ],
+      "Resource": [
+        "arn:aws:ecr:REGION:ACCOUNT_ID:repository/bedrock-agentcore-*"
+      ]
+    },
+    {
+      "Sid": "ECRTokenContainerBuildsOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "The minimum a caller needs to invoke the deployed agent -- nothing else.",
+    "Attach this to the FastAPI backend's role, or to a developer running the",
+    "live validation scripts. Replace REGION, ACCOUNT_ID and AGENT_ID.",
+    "",
+    "This is deliberately not BedrockAgentCoreFullAccess. A component that only",
+    "needs to send a prompt should not be able to create or delete runtimes."
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeThisAgentOnly",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:InvokeAgentRuntime"
+      ],
+      "Resource": [
+        "arn:aws:bedrock-agentcore:REGION:ACCOUNT_ID:runtime/AGENT_ID",
+        "arn:aws:bedrock-agentcore:REGION:ACCOUNT_ID:runtime/AGENT_ID/*"
+      ]
+    }
+  ]
+}

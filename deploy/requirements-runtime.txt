@@ -1,0 +1,10 @@
+# Runtime dependencies for the AgentCore container.
+#
+# Deliberately excludes the FastAPI/dashboard stack: AgentCore serves the agent,
+# not the web UI, and a smaller image is a smaller attack surface and a faster
+# cold start. It also excludes pytest and pypdf, which are test-only.
+strands-agents>=1.54
+strands-agents-tools>=0.8
+bedrock-agentcore>=0.1
+reportlab>=4.0
+python-dotenv>=1.0
