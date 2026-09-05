@@ -8,6 +8,7 @@ from strands import Agent
 
 from app.database import init_db
 from app.model_provider import build_model
+from app.tools.amounts import parse_amount
 from app.tools.clients import (
     create_client,
     find_client,
@@ -22,6 +23,8 @@ from app.tools.invoices import (
 )
 
 TOOLS = [
+    # Amounts
+    parse_amount,
     # Clients
     find_client,
     create_client,
@@ -63,10 +66,15 @@ Rules you must not break:
 5. When a client is not found, do not silently create one. Say who you could not
    find and ask whether to create them.
 
-6. Amounts cross the tool boundary in minor units -- paise for INR, cents for
-   USD. 40,000 rupees is 4000000. 250 dollars is 25000. Convert carefully, and
-   read the amount_display field back to the user rather than formatting
+6. Never do financial arithmetic yourself. When the user gives an amount in
+   words -- "40k", "1.5 lakh", "Rs 40,000" -- pass those exact characters to
+   parse_amount and use the amount_minor it returns. Do not multiply by 100 in
+   your head. Pass only the amount phrase, not the surrounding sentence.
+   Read the amount_display field back to the user rather than formatting
    currency yourself.
+
+   If parse_amount reports the text is ambiguous or unparseable, ask the user
+   what they meant. Do not fall back to converting it yourself.
 
 7. You never choose an invoice number. create_invoice assigns it from the
    database and returns it. Report the number it gave you.
