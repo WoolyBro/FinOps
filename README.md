@@ -23,12 +23,13 @@ tested first; the live model is connected once the tools are trustworthy.
 | 2 | Invoice numbering, creation, retrieval, validation, amount parsing | done |
 | 2.8 | Deterministic invoice PDFs | done |
 | 3 | Payments, balances, status transitions, receipts | done |
-| 4 | Overdue detection, reminders, financial summaries | next |
-| 5 | Live Strands + Bedrock | |
+| 4 | Overdue detection, reminders, financial summaries | done |
+| 5 | Live Strands + Bedrock | next |
 | 6 | FastAPI + Next.js UI, agent activity panel | |
 | 7 | AgentCore deployment, demo, evaluation | |
 
-249 tests pass with no credentials of any kind.
+321 tests pass with no credentials of any kind. 21 tools are registered with
+the agent; none of them has yet been called by a real model -- that is Phase 5.
 
 ## Setup
 
@@ -137,6 +138,45 @@ falls back to "Rs. " rather than printing a black box.
 render cannot take an invoice down with it, and the agent is told never to
 claim a document exists unless `generate_invoice_pdf` returned "created".
 
+**Every reporting tool is read-only and derived at query time.** There is no
+stored `overdue`, `monthly_revenue`, or `total_outstanding` anywhere. Close the
+app for three weeks and reopen it: every figure is exactly as correct as if it
+had been running the whole time, because nothing was cached while it was closed.
+
+**Money is never summed across currencies.** `get_overdue_invoices`,
+`get_outstanding_invoices`, `get_client_balance` and `get_financial_summary` all
+return a list of `{currency, total_minor, total_display}`, one entry per
+currency present, rather than a single total that would silently add USD and
+INR together. `list_invoices`/`list_payments` predate this and still sum
+regardless of currency -- fine for a single-currency freelancer, a latent bug
+for anyone billing in more than one. Worth fixing before Phase 5 if that matters.
+
+**`get_outstanding_invoices` and `get_overdue_invoices` are deliberately
+separate**, even though overdue is a subset of outstanding. An invoice due next
+week and an invoice four days late are both outstanding, but a freelancer
+chasing late payments needs the narrower list, not everything they're owed.
+
+**A financial summary's period and its snapshot don't mean the same thing.**
+`received` and the invoice-issued counts are scoped to `start_date`/`end_date`
+because they're flows -- money that moved, invoices that went out. `outstanding`
+and `overdue` are current totals across every open invoice regardless of when
+it was issued, because a balance owed doesn't belong to a calendar month: an
+invoice from three months ago that's still unpaid is still relevant today.
+Documented explicitly in the tool's docstring since the two halves of one
+return value are scoped differently on purpose.
+
+**A reminder is drafted from the invoice, not phrased by the model.** The
+invoice number, client name, outstanding balance, due date and days overdue in
+the message text all come from `invoice_to_dict` -- the model never edits a
+figure into the wording. A reminder only reaches `APPROVED` through
+`approve_reminder`; there is no send capability at all yet, deliberately.
+
+**A reminder keeps one active draft per invoice.** Calling
+`create_payment_reminder` again while a `DRAFT` or `APPROVED` reminder already
+exists returns that reminder instead of writing a duplicate; `force=true` after
+the user asks for a second one is the only way past it. A `CANCELLED` reminder
+doesn't block a new draft.
+
 ## Layout
 
 ```
@@ -157,6 +197,10 @@ app/
                      get_next_invoice_number, generate_invoice_pdf
     payments.py      record_payment, get_payment, list_payments,
                      generate_receipt
+    reports.py       get_overdue_invoices, get_outstanding_invoices,
+                     get_client_balance, get_financial_summary
+    reminders.py     create_payment_reminder, approve_reminder,
+                     list_reminders
 tests/
 data/                SQLite database (gitignored)
   invoices/          generated invoice PDFs, named FF-0001.pdf

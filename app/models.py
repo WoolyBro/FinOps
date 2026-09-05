@@ -139,3 +139,42 @@ def payment_to_dict(row: sqlite3.Row) -> dict:
         "invoice_status": row["invoice_status"],
         "created_at": row["created_at"],
     }
+
+
+# A reminder carries the invoice and client it was written for, plus the
+# balance at the moment it was prepared -- not a live view, the same way a
+# receipt is not a live view. The wording does not change if the balance
+# moves after the reminder was drafted; a new reminder is prepared instead.
+REMINDER_SELECT = """
+SELECT r.*,
+       i.invoice_number,
+       i.project,
+       i.currency,
+       i.amount_minor AS invoice_amount_minor,
+       i.due_date      AS invoice_due_date,
+       i.status        AS invoice_status,
+       i.client_id,
+       c.name  AS client_name,
+       c.email AS client_email
+  FROM reminders r
+  JOIN invoices i ON i.id = r.invoice_id
+  JOIN clients  c ON c.id = i.client_id
+"""
+
+
+def reminder_to_dict(row: sqlite3.Row) -> dict:
+    """Flatten a reminder row for the agent and the tests."""
+    return {
+        "reminder_id": row["id"],
+        "invoice_id": row["invoice_id"],
+        "invoice_number": row["invoice_number"],
+        "client_id": row["client_id"],
+        "client_name": row["client_name"],
+        "client_email": row["client_email"],
+        "project": row["project"],
+        "channel": row["channel"],
+        "message": row["message"],
+        "reminder_status": row["status"],
+        "created_at": row["created_at"],
+        "sent_at": row["sent_at"],
+    }

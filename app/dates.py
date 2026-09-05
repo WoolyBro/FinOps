@@ -56,3 +56,19 @@ def is_overdue(due_date, outstanding_minor: int, as_of=None) -> bool:
     if not due_date or outstanding_minor <= 0:
         return False
     return parse_date(due_date) < parse_date(as_of or today())
+
+
+def current_month_bounds(as_of=None) -> tuple[str, str]:
+    """The first and last day of the calendar month containing `as_of`.
+
+    Used as the default reporting period when a caller asks "how much have I
+    made" without naming a range.
+    """
+    d = parse_date(as_of or today())
+    start = d.replace(day=1)
+    if start.month == 12:
+        next_month = start.replace(year=start.year + 1, month=1)
+    else:
+        next_month = start.replace(month=start.month + 1)
+    end = next_month - timedelta(days=1)
+    return start.isoformat(), end.isoformat()
