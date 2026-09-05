@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Trust policy for the AgentCore Runtime execution role.",
+    "Replace REGION and ACCOUNT_ID before use.",
+    "The SourceAccount and SourceArn conditions prevent the confused-deputy",
+    "problem: without them, any AWS account could ask AgentCore to assume this",
+    "role on their behalf."
+  ],
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AssumeRolePolicy",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "bedrock-agentcore.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceAccount": "ACCOUNT_ID"
+        },
+        "ArnLike": {
+          "aws:SourceArn": "arn:aws:bedrock-agentcore:REGION:ACCOUNT_ID:*"
+        }
+      }
+    }
+  ]
+}

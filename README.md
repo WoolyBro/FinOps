@@ -14,8 +14,10 @@ decides *what* to do; Python does it.
 
 ## Status
 
-**Phases 1-4 complete.** The deterministic business layer was built and tested
-first; the live model gets connected only now that the tools are trustworthy.
+**Phases 1-7 complete.** The deterministic business layer was built and tested
+first; the live model and its AgentCore deployment came only once the tools
+were trustworthy. What is still unproven is the live Bedrock round-trip, which
+needs AWS credentials.
 
 | Phase | Scope | State |
 |---|---|---|
@@ -26,9 +28,10 @@ first; the live model gets connected only now that the tools are trustworthy.
 | 4 | Overdue detection, reminders, financial summaries | done |
 | 5 | Live Strands + Bedrock | harness ready, awaiting credentials |
 | 6 | FastAPI + Next.js UI, agent activity panel | done |
-| 7 | AgentCore deployment, demo, evaluation | |
+| 7 | AgentCore Runtime deployment | done (deploy blocked on AWS credentials) |
+| 8 | Storage durability, demo, evaluation | |
 
-394 tests pass with no credentials of any kind. 21 tools are registered with
+428 tests pass with no credentials of any kind. 21 tools are registered with
 the agent. The agent loop itself is proven offline against a scripted model
 (`tests/test_agent_loop.py`); what remains unproven is whether a *real* model
 chooses the right tools, which is what `pytest -m live` measures.
@@ -67,26 +70,35 @@ rewrite.
 Four steps, all on your side — none of them can be scripted from here, because
 they need your AWS account.
 
-1. **Create an IAM user** with programmatic access and the
-   `AmazonBedrockFullAccess` policy (or, more tightly,
-   `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`).
-2. **Request model access** in the Bedrock console → *Model access* → enable
-   **Anthropic Claude**. This is the step people forget; credentials alone are
-   not enough, and access can take a few minutes to activate.
-3. **Install the AWS CLI and configure it** (`aws configure`), or put the
-   credentials in your environment. `model_provider.py` resolves whatever
-   botocore can find, so a profile, an SSO session or env vars all work.
-4. **Pick a region that has the model** — `us-east-1` is the safe default and
-   what `AWS_REGION` falls back to.
+1. **Create an IAM user** with programmatic access. For least privilege, use
+   `deploy/iam/execution-role-policy.json` rather than a `FullAccess` policy.
+2. **Enable model access** in the Bedrock console → *Model access* → **Anthropic
+   Claude**. Model access is granted *per region*; credentials alone are not
+   enough, and this is the step people miss.
+3. **Configure credentials** (`aws configure`, a profile, or an SSO session).
+   `model_provider.py` resolves whatever botocore can find.
+4. **Set the region explicitly.**
+
+   ```bash
+   export FF_AWS_REGION=ap-south-1
+   ```
+
+   There is no fallback default. A model enabled in one region is not enabled
+   in another, so guessing turns a missing grant into an opaque `AccessDenied`
+   at the first inference call instead of a clear error at start-up.
 
 Verify it resolved:
 
 ```bash
-python -c "from app.model_provider import resolve_provider; print(resolve_provider())"
+python -c "from app.model_provider import provider_status; print(provider_status())"
 ```
 
-That should print `bedrock`. If it raises, the message names both paths —
-Bedrock and Ollama — and what each one needs.
+That should report `available: True` with `provider: bedrock` and your region.
+If not, the message names what is missing.
+
+For deploying the agent to AgentCore Runtime — the runtime contract, the
+minimum IAM policies, region availability, and the storage limitation you must
+read before pointing it at real data — see **[docs/AGENTCORE.md](docs/AGENTCORE.md)**.
 
 ## Running
 
@@ -120,7 +132,7 @@ python -m app.cli "Add a client called Rahul Sharma"
 The deterministic suite needs no credentials and spends nothing:
 
 ```bash
-pytest -q                             # 394 tests, live ones skipped
+pytest -q                             # 428 tests, live ones skipped
 ```
 
 Live tests call a real model and cost money, so they are opt-in:
@@ -144,6 +156,24 @@ python -m app.live_check --scenario payment --full   # all 21 tools available
 ```
 
 Each run uses a scratch database, so smoke tests never touch real records.
+
+## Deployment
+
+The agent deploys to Amazon Bedrock AgentCore Runtime.
+`app/agentcore_app.py` implements the runtime contract (`0.0.0.0:8080`,
+`POST /invocations`, `GET /ping`, ARM64) and calls the same `AgentService` the
+API calls — no tool code changed for it.
+
+```bash
+python -m app.agentcore_app          # run the runtime contract locally
+```
+
+**Before deploying against real data, read the storage section of
+[docs/AGENTCORE.md](docs/AGENTCORE.md).** AgentCore gives each session its own
+microVM with an ephemeral, per-session filesystem, so the SQLite database is
+neither shared between sessions nor durable across deploys. The runtime reports
+that as a readiness warning on every invocation rather than letting it pass
+unnoticed, and the doc sets out the smallest migration path.
 
 ## Design decisions
 

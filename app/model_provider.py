@@ -19,6 +19,8 @@ import os
 import socket
 from urllib.parse import urlparse
 
+from app.aws_config import RegionNotConfigured, require_region, resolve_region
+
 # Sensible defaults per provider; override with FF_MODEL_ID.
 BEDROCK_MODEL_ID = "global.anthropic.claude-sonnet-4-6"
 OLLAMA_MODEL_ID = "llama3.1"
@@ -98,9 +100,17 @@ def build_model():
     if provider == "bedrock":
         from strands.models import BedrockModel
 
+        # Explicit, never inherited. A model enabled in one region is not
+        # enabled in another, and guessing turns that into an opaque
+        # AccessDenied at the first inference call instead of a clear error here.
+        try:
+            region = require_region()
+        except RegionNotConfigured as exc:
+            raise ModelNotConfigured(str(exc)) from exc
+
         return BedrockModel(
             model_id=model_id or BEDROCK_MODEL_ID,
-            region_name=os.getenv("AWS_REGION", "us-east-1"),
+            region_name=region,
             temperature=0.2,
         )
 
@@ -134,9 +144,24 @@ def provider_status() -> dict:
     model_id = os.getenv("FF_MODEL_ID") or (
         BEDROCK_MODEL_ID if provider == "bedrock" else OLLAMA_MODEL_ID
     )
+
+    region = resolve_region()
+    if provider == "bedrock" and not region:
+        return {
+            "available": False,
+            "provider": provider,
+            "model_id": model_id,
+            "region": None,
+            "detail": (
+                "Bedrock is selected but no AWS region is configured. "
+                "Set FF_AWS_REGION."
+            ),
+        }
+
     return {
         "available": True,
         "provider": provider,
         "model_id": model_id,
+        "region": region if provider == "bedrock" else None,
         "detail": None,
     }

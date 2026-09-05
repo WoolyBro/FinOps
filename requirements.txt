@@ -9,6 +9,9 @@ reportlab>=4.0
 pytest>=8.0
 pypdf>=5.0
 
+# AgentCore Runtime
+bedrock-agentcore>=0.1
+
 # API
 fastapi>=0.115
 uvicorn>=0.30

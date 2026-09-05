@@ -17,7 +17,15 @@ from app.model_provider import (
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
     """Start from no provider configuration at all."""
-    for var in ("FF_MODEL_PROVIDER", "FF_MODEL_ID", "ANTHROPIC_API_KEY", "OLLAMA_HOST"):
+    for var in (
+        "FF_MODEL_PROVIDER",
+        "FF_MODEL_ID",
+        "ANTHROPIC_API_KEY",
+        "OLLAMA_HOST",
+        "FF_AWS_REGION",
+        "AWS_REGION",
+        "AWS_DEFAULT_REGION",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -141,15 +149,41 @@ def test_status_when_unavailable(monkeypatch):
 
 def test_status_when_bedrock_is_available(monkeypatch):
     with_aws(monkeypatch)
+    monkeypatch.setenv("FF_AWS_REGION", "ap-south-1")
     status = provider_status()
     assert status["available"] is True
     assert status["provider"] == "bedrock"
     assert status["model_id"] == model_provider.BEDROCK_MODEL_ID
+    assert status["region"] == "ap-south-1"
     assert status["detail"] is None
+
+
+def test_bedrock_without_a_region_is_not_available(monkeypatch):
+    """Credentials alone are not enough -- a model is enabled per region."""
+    with_aws(monkeypatch)
+    status = provider_status()
+    assert status["available"] is False
+    assert status["provider"] == "bedrock"
+    assert "region" in status["detail"].lower()
+
+
+def test_building_a_bedrock_model_without_a_region_fails_clearly(monkeypatch):
+    monkeypatch.setenv("FF_MODEL_PROVIDER", "bedrock")
+    with pytest.raises(ModelNotConfigured) as exc:
+        model_provider.build_model()
+    assert "region" in str(exc.value).lower()
+
+
+def test_ollama_status_does_not_require_a_region(monkeypatch):
+    monkeypatch.setenv("FF_MODEL_PROVIDER", "ollama")
+    status = provider_status()
+    assert status["available"] is True
+    assert status["region"] is None
 
 
 def test_status_honours_an_overridden_model_id(monkeypatch):
     with_aws(monkeypatch)
+    monkeypatch.setenv("FF_AWS_REGION", "ap-south-1")
     monkeypatch.setenv("FF_MODEL_ID", "global.anthropic.claude-haiku-4-5")
     assert provider_status()["model_id"] == "global.anthropic.claude-haiku-4-5"
 
@@ -159,12 +193,23 @@ def test_status_honours_an_overridden_model_id(monkeypatch):
 
 def test_builds_a_bedrock_model(monkeypatch):
     monkeypatch.setenv("FF_MODEL_PROVIDER", "bedrock")
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("FF_AWS_REGION", "ap-south-1")
     from strands.models import BedrockModel
 
     model = model_provider.build_model()
     assert isinstance(model, BedrockModel)
     assert model.get_config()["model_id"] == model_provider.BEDROCK_MODEL_ID
+
+
+def test_ff_aws_region_wins_over_aws_region(monkeypatch):
+    """The project's own setting takes precedence over the ambient one."""
+    monkeypatch.setenv("FF_MODEL_PROVIDER", "bedrock")
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    monkeypatch.setenv("FF_AWS_REGION", "ap-south-1")
+
+    model = model_provider.build_model()
+    # BedrockModel keeps the region on its boto3 client, not in get_config().
+    assert model.client.meta.region_name == "ap-south-1"
 
 
 def test_builds_an_ollama_model(monkeypatch):
