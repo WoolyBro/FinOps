@@ -1,0 +1,4 @@
+strands-agents[anthropic]>=1.54
+strands-agents-tools>=0.8
+python-dotenv>=1.0
+pytest>=8.0
