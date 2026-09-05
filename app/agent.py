@@ -151,14 +151,26 @@ document numbers from the tool results, not a restatement of the request.
 """
 
 
-def build_agent(**kwargs) -> Agent:
-    """Construct the agent with its tools and a live database."""
+def build_agent(tools=None, tracer=None, **kwargs) -> Agent:
+    """Construct the agent with its tools and a live database.
+
+    Args:
+        tools: A subset of TOOLS, for narrowing what the model can reach while
+            diagnosing which tool it picks. Defaults to all of them.
+        tracer: A ToolTracer to record the call chain. Phase 5 asserts against
+            the tools the model chose, not the sentence it wrote.
+    """
     init_db()
+    hooks = list(kwargs.pop("hooks", []))
+    if tracer is not None:
+        hooks.append(tracer)
+
     return Agent(
         model=build_model(),
-        tools=TOOLS,
+        tools=list(tools) if tools is not None else TOOLS,
         system_prompt=system_prompt(),
         name="FreelanceFlow",
         description="AI billing operations agent for freelancers",
+        hooks=hooks,
         **kwargs,
     )
