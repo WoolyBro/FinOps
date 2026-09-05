@@ -75,3 +75,67 @@ def invoice_to_dict(row: sqlite3.Row, as_of: str | None = None) -> dict:
         "pdf_path": row["pdf_path"],
         "created_at": row["created_at"],
     }
+
+
+# A payment carries its invoice and client with it, plus the running total paid
+# up to and including this payment. That running total is what a receipt needs:
+# the balance as it stood when this money arrived, not the balance today.
+PAYMENT_SELECT = """
+SELECT p.*,
+       i.invoice_number,
+       i.project,
+       i.description AS invoice_description,
+       i.currency,
+       i.amount_minor AS invoice_amount_minor,
+       i.status        AS invoice_status,
+       i.issue_date    AS invoice_issue_date,
+       i.due_date      AS invoice_due_date,
+       i.client_id,
+       c.name    AS client_name,
+       c.email   AS client_email,
+       c.phone   AS client_phone,
+       c.address AS client_address,
+       COALESCE((SELECT SUM(p2.amount_minor)
+                   FROM payments p2
+                  WHERE p2.invoice_id = p.invoice_id
+                    AND p2.id <= p.id), 0) AS paid_to_date_minor
+  FROM payments p
+  JOIN invoices i ON i.id = p.invoice_id
+  JOIN clients  c ON c.id = i.client_id
+"""
+
+
+def payment_to_dict(row: sqlite3.Row) -> dict:
+    """Flatten a payment row, with the balance as it stood at that payment."""
+    from app.money import format_money
+
+    currency = row["currency"]
+    amount = int(row["amount_minor"])
+    invoice_amount = int(row["invoice_amount_minor"])
+    paid_to_date = int(row["paid_to_date_minor"] or 0)
+    outstanding_after = invoice_amount - paid_to_date
+
+    return {
+        "payment_id": row["id"],
+        "invoice_id": row["invoice_id"],
+        "invoice_number": row["invoice_number"],
+        "client_id": row["client_id"],
+        "client_name": row["client_name"],
+        "project": row["project"],
+        "currency": currency,
+        "amount_minor": amount,
+        "amount_display": format_money(amount, currency),
+        "payment_date": row["payment_date"],
+        "method": row["method"],
+        "reference": row["reference"],
+        "receipt_number": row["receipt_number"],
+        "receipt_path": row["receipt_path"],
+        "invoice_amount_minor": invoice_amount,
+        "invoice_amount_display": format_money(invoice_amount, currency),
+        "paid_to_date_minor": paid_to_date,
+        "paid_to_date_display": format_money(paid_to_date, currency),
+        "outstanding_after_minor": outstanding_after,
+        "outstanding_after_display": format_money(outstanding_after, currency),
+        "invoice_status": row["invoice_status"],
+        "created_at": row["created_at"],
+    }

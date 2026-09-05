@@ -22,13 +22,13 @@ tested first; the live model is connected once the tools are trustworthy.
 | 1 | Strands agent, model provider, SQLite schema, client tools | done |
 | 2 | Invoice numbering, creation, retrieval, validation, amount parsing | done |
 | 2.8 | Deterministic invoice PDFs | done |
-| 3 | Payments, balances, receipts | next |
-| 4 | Overdue detection, reminders, financial summaries | |
+| 3 | Payments, balances, status transitions, receipts | done |
+| 4 | Overdue detection, reminders, financial summaries | next |
 | 5 | Live Strands + Bedrock | |
 | 6 | FastAPI + Next.js UI, agent activity panel | |
 | 7 | AgentCore deployment, demo, evaluation | |
 
-183 tests pass with no credentials of any kind.
+249 tests pass with no credentials of any kind.
 
 ## Setup
 
@@ -86,6 +86,27 @@ a failed insert returns the number rather than leaving a gap in the sequence.
 
 **`amount_paid` is not a column.** It is `SUM(payments.amount_minor)`, computed
 on every read, so the stated balance and the payment ledger cannot disagree.
+Delete a payment row and every balance in the system changes with it -- there is
+a test asserting exactly that.
+
+**Invoice status is a cache of the ledger, not an independent fact.** It is
+recalculated inside the same transaction as every payment write, so UNPAID ->
+PARTIALLY_PAID -> PAID follows the money rather than the model's opinion.
+A cancelled invoice keeps its status and refuses payments outright.
+
+**Payments cannot overshoot.** A payment larger than the outstanding balance is
+refused with the real figure in the error, rather than being recorded and
+leaving a negative balance to explain later.
+
+**A payment keeps one receipt number for life.** Calling `generate_receipt`
+again returns the existing receipt instead of issuing a second number, and the
+number is reserved in the same transaction as the render, so a failed render
+gives it back rather than leaving a gap in the sequence.
+
+**A receipt records a moment, not a live view.** Each one shows the balance as
+it stood when that money arrived, computed in SQL from the payments up to and
+including it -- so regenerating an old receipt after later payments still shows
+the historical balance.
 
 **The model does no financial arithmetic.** `parse_amount` turns the user's own
 words -- "40k", "1.5 lakh", "Rs 40,000/-", "$250" -- into minor units in Python.
@@ -125,7 +146,7 @@ app/
   database.py        SQLite schema, connections, counters
   models.py          row -> dict converters (what the model actually reads)
   money.py           minor-unit validation, parsing and currency formatting
-  pdf_generator.py   deterministic invoice PDF rendering
+  pdf_generator.py   deterministic invoice and receipt PDF rendering
   dates.py           ISO date parsing and derived overdue calculation
   config.py          paths and settings
   cli.py             terminal entry point
@@ -134,8 +155,10 @@ app/
     clients.py       find_client, create_client, list_clients, update_client
     invoices.py      create_invoice, get_invoice, list_invoices,
                      get_next_invoice_number, generate_invoice_pdf
+    payments.py      record_payment, get_payment, list_payments,
+                     generate_receipt
 tests/
 data/                SQLite database (gitignored)
   invoices/          generated invoice PDFs, named FF-0001.pdf
-  receipts/          generated receipts (phase 3)
+  receipts/          generated receipts, named RC-0001.pdf
 ```

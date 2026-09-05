@@ -27,11 +27,18 @@ from app.config import (
     BUSINESS_NAME,
     BUSINESS_PHONE,
     INVOICES_DIR,
+    RECEIPT_PREFIX,
+    RECEIPTS_DIR,
     ensure_dirs,
 )
-from app.database import get_db
+from app.database import get_db, next_counter
 from app.dates import parse_date
-from app.models import INVOICE_SELECT, invoice_to_dict
+from app.models import (
+    INVOICE_SELECT,
+    PAYMENT_SELECT,
+    invoice_to_dict,
+    payment_to_dict,
+)
 from app.money import format_money
 
 RUPEE = 0x20B9
@@ -312,4 +319,219 @@ def create_invoice_pdf(invoice_id: int, output_dir: Path | None = None) -> dict:
         "invoice_id": invoice_id,
         "invoice_number": invoice["invoice_number"],
         "pdf_path": str(path),
+    }
+
+
+# --- receipts -------------------------------------------------------------
+
+
+class ReceiptRenderFailed(Exception):
+    """Raised inside the transaction so a failed render returns the number."""
+
+    def __init__(self, receipt_number: str, cause: Exception):
+        self.receipt_number = receipt_number
+        self.cause = cause
+        super().__init__(str(cause))
+
+
+def format_receipt_number(sequence: int) -> str:
+    """Render a counter value as a receipt number, e.g. 4 becomes RC-0004."""
+    return f"{RECEIPT_PREFIX}-{sequence:04d}"
+
+
+def render_receipt_pdf(payment: dict, receipt_number: str, path: Path) -> Path:
+    """Draw one receipt to `path`. Every figure comes from `payment`."""
+    regular, bold, has_rupee = resolve_fonts()
+    fonts = (regular, bold, has_rupee)
+    ascii_symbol = not has_rupee
+
+    def money(minor: int) -> str:
+        return format_money(minor, payment["currency"], ascii_symbol=ascii_symbol)
+
+    page_width, page_height = A4
+    margin = 20 * mm
+    right = page_width - margin
+    column = (page_width - 2 * margin - 10 * mm) / 2
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    c = pdfcanvas.Canvas(str(path), pagesize=A4)
+    c.setTitle(f"Receipt {receipt_number}")
+    c.setAuthor(BUSINESS_NAME)
+    c.setSubject(f"Payment for invoice {payment['invoice_number']}")
+
+    y = page_height - margin
+
+    # --- masthead ---------------------------------------------------------
+    c.setFont(bold, 13)
+    c.drawString(margin, y, "FREELANCEFLOW")
+    c.setFont(bold, 22)
+    c.drawRightString(right, y + 1 * mm, "RECEIPT")
+    c.setFont(regular, 11)
+    c.setFillGray(0.35)
+    c.drawRightString(right, y - 7 * mm, f"#{receipt_number}")
+    c.setFillGray(0)
+
+    y -= 14 * mm
+    c.setLineWidth(0.75)
+    c.line(margin, y, right, y)
+    y -= 10 * mm
+
+    # --- parties ----------------------------------------------------------
+    received_from = [
+        payment["client_name"],
+        payment.get("client_email") or "",
+        payment.get("client_phone") or "",
+        payment.get("client_address") or "",
+    ]
+    received_by = [BUSINESS_NAME, BUSINESS_EMAIL, BUSINESS_PHONE, BUSINESS_ADDRESS]
+    left_y = _draw_labelled_block(
+        c, margin, y, "Received From", received_from, fonts, column
+    )
+    right_y = _draw_labelled_block(
+        c, margin + column + 10 * mm, y, "Received By", received_by, fonts, column
+    )
+    y = min(left_y, right_y) - 6 * mm
+
+    # --- what it was for --------------------------------------------------
+    y = _draw_labelled_block(
+        c,
+        margin,
+        y,
+        "For",
+        [payment["project"], f"Invoice {payment['invoice_number']}"],
+        fonts,
+        page_width - 2 * margin,
+    )
+    y -= 6 * mm
+
+    # --- the amount received ----------------------------------------------
+    c.setLineWidth(0.75)
+    c.line(margin, y, right, y)
+    y -= 9 * mm
+    c.setFont(bold, 12)
+    c.drawString(margin, y, "Amount Received")
+    c.drawRightString(right, y, money(payment["amount_minor"]))
+    y -= 6 * mm
+    c.setLineWidth(0.75)
+    c.line(margin, y, right, y)
+    y -= 11 * mm
+
+    # --- where that leaves the invoice ------------------------------------
+    for label, value in (
+        ("Invoice Total", money(payment["invoice_amount_minor"])),
+        ("Paid to Date", money(payment["paid_to_date_minor"])),
+        ("Balance", money(payment["outstanding_after_minor"])),
+    ):
+        c.setFont(regular, 10.5)
+        c.setFillGray(0.3)
+        c.drawString(margin, y, label)
+        c.setFillGray(0)
+        c.drawRightString(right, y, value)
+        y -= 6.5 * mm
+
+    y -= 5 * mm
+
+    # --- how it arrived ---------------------------------------------------
+    c.setFont(regular, 10)
+    c.setFillGray(0.3)
+    c.drawString(margin, y, f"Payment Date: {format_long_date(payment['payment_date'])}")
+    y -= 5.5 * mm
+    if payment.get("method"):
+        c.drawString(margin, y, f"Method: {payment['method']}")
+        y -= 5.5 * mm
+    if payment.get("reference"):
+        c.drawString(margin, y, f"Reference: {payment['reference']}")
+        y -= 5.5 * mm
+
+    c.setFillGray(0)
+    c.setFont(bold, 10)
+    if payment["outstanding_after_minor"] <= 0:
+        c.drawString(margin, y, "Invoice settled in full. Thank you.")
+    else:
+        balance = money(payment["outstanding_after_minor"])
+        c.drawString(margin, y, f"Balance outstanding: {balance}")
+
+    # --- footer -----------------------------------------------------------
+    c.setFont(regular, 8)
+    c.setFillGray(0.5)
+    c.drawCentredString(
+        page_width / 2,
+        margin - 4 * mm,
+        f"Receipt {receipt_number} for invoice {payment['invoice_number']}",
+    )
+
+    c.showPage()
+    c.save()
+    return path
+
+
+def create_receipt_pdf(
+    payment_id: int, output_dir: Path | None = None, regenerate: bool = False
+) -> dict:
+    """Generate the receipt document for a recorded payment.
+
+    A receipt exists only against a real payment row, and a payment keeps one
+    receipt number for life. The number is reserved in the same transaction as
+    the render, so a failed render gives it back rather than leaving a gap.
+    """
+    ensure_dirs()
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                PAYMENT_SELECT + " WHERE p.id = ?", (payment_id,)
+            ).fetchone()
+            if not row:
+                return {"status": "not_found", "payment_id": payment_id}
+
+            payment = payment_to_dict(row)
+            payment.update(
+                {
+                    "client_email": row["client_email"],
+                    "client_phone": row["client_phone"],
+                    "client_address": row["client_address"],
+                }
+            )
+
+            existing_number = payment["receipt_number"]
+            if existing_number and not regenerate:
+                return {
+                    "status": "already_exists",
+                    "payment_id": payment_id,
+                    "invoice_number": payment["invoice_number"],
+                    "receipt_number": existing_number,
+                    "receipt_path": payment["receipt_path"],
+                    "hint": (
+                        "This payment already has a receipt. Pass regenerate "
+                        "only to redraw that same receipt number."
+                    ),
+                }
+
+            receipt_number = existing_number or format_receipt_number(
+                next_counter(conn, "receipt")
+            )
+            directory = Path(output_dir) if output_dir else RECEIPTS_DIR
+            path = directory / f"{receipt_number}.pdf"
+
+            try:
+                render_receipt_pdf(payment, receipt_number, path)
+            except Exception as exc:
+                raise ReceiptRenderFailed(receipt_number, exc) from exc
+
+            conn.execute(
+                "UPDATE payments SET receipt_number = ?, receipt_path = ? WHERE id = ?",
+                (receipt_number, str(path), payment_id),
+            )
+    except ReceiptRenderFailed as failure:
+        return {
+            "status": "error",
+            "payment_id": payment_id,
+            "error": f"Could not generate the receipt: {failure.cause}",
+        }
+
+    return {
+        "status": "created",
+        "payment_id": payment_id,
+        "invoice_number": payment["invoice_number"],
+        "receipt_number": receipt_number,
+        "receipt_path": str(path),
     }

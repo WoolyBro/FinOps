@@ -15,6 +15,12 @@ from app.tools.clients import (
     list_clients,
     update_client,
 )
+from app.tools.payments import (
+    generate_receipt,
+    get_payment,
+    list_payments,
+    record_payment,
+)
 from app.tools.invoices import (
     create_invoice,
     generate_invoice_pdf,
@@ -36,8 +42,13 @@ TOOLS = [
     get_invoice,
     list_invoices,
     get_next_invoice_number,
+    # Payments
+    record_payment,
+    get_payment,
+    list_payments,
     # Documents
     generate_invoice_pdf,
+    generate_receipt,
 ]
 
 
@@ -89,6 +100,14 @@ Rules you must not break:
    and tell the user where it was saved. Only say the document exists if that
    tool returned "created". Regenerate it after a payment so the balance on the
    page matches the ledger.
+
+10. Payments are the record of what was received. Never calculate a balance or
+    decide an invoice's status yourself -- record_payment returns both, computed
+    from the ledger. If it refuses a payment, tell the user exactly why; do not
+    retry with a different amount to make it fit.
+
+11. A receipt is issued against a recorded payment, never on its own. Record the
+    payment first, then call generate_receipt with the payment id it returned.
 
 Style: be brief and concrete. Confirm what you did with the actual figures and
 document numbers from the tool results, not a restatement of the request.
