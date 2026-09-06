@@ -29,12 +29,31 @@ DEFAULT_ORIGINS = [
 ]
 
 
+class InsecureCorsConfiguration(RuntimeError):
+    """The configured CORS policy would expose authenticated responses."""
+
+
 def cors_origins() -> list[str]:
-    """Allowed browser origins, overridable for a deployed frontend."""
+    """Allowed browser origins, overridable for a deployed frontend.
+
+    A wildcard is refused rather than accepted, because this app sends
+    credentialed requests: `*` combined with allow_credentials makes the
+    browser echo whatever Origin it was given, which lets any site on the
+    internet read a logged-in user's invoices. Failing at start-up is far
+    better than shipping that.
+    """
     configured = os.getenv("FF_CORS_ORIGINS", "").strip()
     if not configured:
         return DEFAULT_ORIGINS
-    return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+    origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
+    if any(origin == "*" for origin in origins):
+        raise InsecureCorsConfiguration(
+            "FF_CORS_ORIGINS may not contain '*': this API sends credentialed "
+            "requests, and a wildcard origin with credentials would let any "
+            "site read a user's billing data. List the exact origins instead."
+        )
+    return origins
 
 
 @asynccontextmanager

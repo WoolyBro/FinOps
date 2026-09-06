@@ -37,6 +37,7 @@ from app.aws_config import region_status
 from app.database import init_db
 from app.model_provider import provider_status
 from app.observability import configure_logging, tool_call_summary
+from app.security import safe_detail, scrub
 from app.services.agent_service import AgentService, AgentUnavailable
 
 log = configure_logging()
@@ -70,7 +71,11 @@ def readiness() -> dict:
         init_db()
         database_ok, database_detail = True, None
     except Exception as exc:  # a container that cannot open its DB is not ready
-        database_ok, database_detail = False, str(exc)
+        # The raw error names the database file. That path is for the logs,
+        # not for whoever is calling the runtime.
+        log.error("database unavailable", exc_info=True)
+        database_ok = False
+        database_detail = safe_detail(exc, "The database could not be opened.")
 
     warnings = []
     if not storage_is_durable():
@@ -153,7 +158,13 @@ def invoke(payload: dict, context: Any = None) -> dict:
             or "The runtime is not configured."
         )
         log.error("invocation refused", extra={"reason": "not_ready"})
-        return {"error": "not_ready", "detail": detail, "readiness": state}
+        # scrub, not raw: readiness carries a region, a model id and possibly a
+        # filesystem path from the database check.
+        return {
+            "error": "not_ready",
+            "detail": scrub(detail),
+            "readiness": scrub(state),
+        }
 
     log.info(
         "invocation started",

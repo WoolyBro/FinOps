@@ -130,6 +130,16 @@ def list_clients(limit: int = 50) -> dict:
     }
 
 
+# One fixed statement per updatable field. No SQL in this module is ever
+# assembled from a variable.
+UPDATE_STATEMENTS = {
+    "email": "UPDATE clients SET email = ? WHERE id = ?",
+    "phone": "UPDATE clients SET phone = ? WHERE id = ?",
+    "address": "UPDATE clients SET address = ? WHERE id = ?",
+    "notes": "UPDATE clients SET notes = ? WHERE id = ?",
+}
+
+
 @tool
 def update_client(client_id: int, field: str, value: str) -> dict:
     """Update one field on an existing client.
@@ -142,7 +152,7 @@ def update_client(client_id: int, field: str, value: str) -> dict:
     Returns:
         status "updated" with the refreshed client record.
     """
-    allowed = {"name", "email", "phone", "address", "notes"}
+    allowed = {"name", *UPDATE_STATEMENTS}
     if field not in allowed:
         return {
             "status": "error",
@@ -174,9 +184,10 @@ def update_client(client_id: int, field: str, value: str) -> dict:
                 (value.strip(), key, client_id),
             )
         else:
-            conn.execute(
-                f"UPDATE clients SET {field} = ? WHERE id = ?", (value, client_id)
-            )
+            # A fixed statement per field rather than a formatted one. The
+            # allowlist above already makes this safe; a lookup keeps it safe
+            # locally, so widening that list later cannot introduce injection.
+            conn.execute(UPDATE_STATEMENTS[field], (value, client_id))
 
         updated = conn.execute(
             "SELECT * FROM clients WHERE id = ?", (client_id,)

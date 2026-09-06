@@ -14,14 +14,26 @@ returning a plausible-looking reply that no model produced.
 
 from __future__ import annotations
 
+import re
 import threading
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.agent import build_agent
 from app.model_provider import ModelNotConfigured, provider_status
 from app.tracing import ToolTracer
+
+
+# A session holds a live Agent and its whole conversation, so an unbounded
+# store is a memory leak with a network-facing trigger. Both limits are
+# deliberate rather than generous.
+MAX_SESSIONS = 200
+SESSION_TTL = timedelta(hours=4)
+
+# Session ids are server-issued hex. Accepting arbitrary client strings would
+# let a caller name someone else's session and continue their conversation.
+_SESSION_ID = re.compile(r"^[0-9a-f]{32}$")
 
 
 class AgentUnavailable(RuntimeError):
@@ -40,6 +52,7 @@ class Session:
     agent: object
     tracer: ToolTracer
     created_at: str
+    last_used: datetime
     turns: int = 0
     history: list[dict] = field(default_factory=list)
 
@@ -77,17 +90,43 @@ class AgentService:
             agent=agent,
             tracer=tracer,
             created_at=_now(),
+            last_used=datetime.now(timezone.utc),
         )
+
+    def _evict(self) -> None:
+        """Drop expired sessions, then the oldest if still over the cap.
+
+        Caller holds the lock.
+        """
+        cutoff = datetime.now(timezone.utc) - SESSION_TTL
+        for key in [
+            key
+            for key, session in self._sessions.items()
+            if session.last_used < cutoff
+        ]:
+            del self._sessions[key]
+
+        while len(self._sessions) >= MAX_SESSIONS:
+            oldest = min(self._sessions, key=lambda k: self._sessions[k].last_used)
+            del self._sessions[oldest]
 
     def session(self, session_id: str | None) -> Session:
         """Fetch an existing session, or start one.
 
-        An unknown session id starts a fresh conversation rather than failing:
-        a restarted server should not break the page the user is looking at.
+        An id that is not a live server-issued session starts a fresh
+        conversation rather than failing -- a restarted server should not break
+        the page the user is looking at. It is never used as the new session's
+        id: ids are issued here, so a caller cannot choose one and cannot name
+        a session it was not given.
         """
         with self._lock:
-            if session_id and session_id in self._sessions:
-                return self._sessions[session_id]
+            if session_id and _SESSION_ID.match(session_id):
+                existing = self._sessions.get(session_id)
+                if existing is not None:
+                    existing.last_used = datetime.now(timezone.utc)
+                    return existing
+
+            self._evict()
             session = self._new_session()
             self._sessions[session.session_id] = session
             return session
@@ -133,6 +172,7 @@ class AgentService:
         ]
 
         session.turns += 1
+        session.last_used = datetime.now(timezone.utc)
         session.history.append({"role": "user", "content": message, "at": _now()})
         session.history.append(
             {
