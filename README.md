@@ -32,7 +32,7 @@ needs AWS credentials.
 | 8 | Live Bedrock validation | harness ready, **awaiting AWS credentials** |
 | 9 | Production hardening (storage durability, cost control) | |
 
-444 tests pass with no credentials of any kind. 21 tools are registered with
+476 tests pass with no credentials of any kind. 21 tools are registered with
 the agent. The agent loop itself is proven offline against a scripted model
 (`tests/test_agent_loop.py`); what remains unproven is whether a *real* model
 chooses the right tools, which is what `pytest -m live` measures.
@@ -133,7 +133,7 @@ python -m app.cli "Add a client called Rahul Sharma"
 The deterministic suite needs no credentials and spends nothing:
 
 ```bash
-pytest -q                             # 444 tests, live ones skipped
+pytest -q                             # 476 tests, live ones skipped
 ```
 
 ## Live validation against Bedrock
@@ -239,6 +239,39 @@ microVM with an ephemeral, per-session filesystem, so the SQLite database is
 neither shared between sessions nor durable across deploys. The runtime reports
 that as a readiness warning on every invocation rather than letting it pass
 unnoticed, and the doc sets out the smallest migration path.
+
+## Security
+
+**Server filesystem paths never cross the HTTP boundary.** `pdf_path` and
+`receipt_path` are replaced with `pdf_available` / `receipt_available` on the
+way out, and any absolute path left in free text is redacted. A path in a
+response leaks the server's directory layout and, on a developer machine, the
+operator's own name.
+
+**Documents are served only from the directories this app owns.** The path
+comes from a database column, and "only we write that column" is an assumption
+that quietly stops being true — so containment is re-checked at the point of
+use, after resolving symlinks and `..`. A stored path pointing anywhere else is
+refused and the document regenerated in place.
+
+**A wildcard CORS origin is refused at start-up.** This API sends credentialed
+requests; `*` with credentials makes the browser echo whatever `Origin` it was
+given, which would let any site read a user's billing data. Setting
+`FF_CORS_ORIGINS=*` raises rather than starts.
+
+**No SQL is assembled from a variable.** Every statement is parameterised, and
+the one per-field update uses a fixed statement per field rather than an
+allowlisted format string — so widening that allowlist later cannot introduce
+injection.
+
+**Error messages are sanitised before they reach a client.** Exception text
+routinely carries paths; anything still path-shaped after redaction is replaced
+with a generic message rather than trusting the redaction.
+
+**The agent session store is bounded** — a TTL and a hard cap. Each session
+holds a live agent and its whole conversation, so an unbounded store is a
+memory leak with a network-facing trigger. Session ids are server-issued and
+validated, so a caller cannot name a session it was not given.
 
 ## Design decisions
 

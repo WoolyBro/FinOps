@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.pdf_generator import create_invoice_pdf, create_receipt_pdf
+from app.security import UnsafePath, resolve_document, safe_detail, scrub
 from app.tools.clients import find_client, list_clients
 from app.tools.invoices import get_invoice, list_invoices
 from app.tools.payments import get_payment, list_payments
@@ -39,11 +40,23 @@ class DocumentUnavailable(RuntimeError):
     """The document could not be produced."""
 
 
+def _document_dirs() -> list[Path]:
+    """The directories this app is allowed to serve documents from.
+
+    Read at call time from the module that writes them, so the containment
+    check can never be comparing against a different directory than the one
+    the renderer actually used.
+    """
+    from app import pdf_generator
+
+    return [Path(pdf_generator.INVOICES_DIR), Path(pdf_generator.RECEIPTS_DIR)]
+
+
 # --- clients ---------------------------------------------------------------
 
 
 def clients(limit: int = 100) -> dict:
-    return list_clients(limit=limit)
+    return scrub(list_clients(limit=limit))
 
 
 def client_detail(client_id: int) -> dict:
@@ -54,15 +67,17 @@ def client_detail(client_id: int) -> dict:
 
     invoices = list_invoices(client_id=client_id, limit=200)
     payments = list_payments(client_id=client_id, limit=200)
-    return {
-        "balance": balance,
-        "invoices": invoices["invoices"],
-        "payments": payments["payments"],
-    }
+    return scrub(
+        {
+            "balance": balance,
+            "invoices": invoices["invoices"],
+            "payments": payments["payments"],
+        }
+    )
 
 
 def search_clients(name: str) -> dict:
-    return find_client(name=name)
+    return scrub(find_client(name=name))
 
 
 # --- invoices --------------------------------------------------------------
@@ -73,7 +88,7 @@ def invoices(client_id: int | None = None, status: str | None = None,
     result = list_invoices(client_id=client_id, status=status, limit=limit)
     if result["status"] == "error":
         raise ValueError(result["error"])
-    return result
+    return scrub(result)
 
 
 def invoice_detail(invoice_id: int) -> dict:
@@ -83,7 +98,7 @@ def invoice_detail(invoice_id: int) -> dict:
         raise NotFound("invoice", invoice_id)
 
     history = list_payments(invoice_id=invoice_id, limit=200)
-    return {"invoice": result["invoice"], "payments": history["payments"]}
+    return scrub({"invoice": result["invoice"], "payments": history["payments"]})
 
 
 def invoice_pdf(invoice_id: int) -> Path:
@@ -98,15 +113,21 @@ def invoice_pdf(invoice_id: int) -> Path:
         raise NotFound("invoice", invoice_id)
 
     existing = result["invoice"].get("pdf_path")
-    if existing and Path(existing).exists():
-        return Path(existing)
+    if existing:
+        try:
+            return resolve_document(existing, _document_dirs())
+        except UnsafePath:
+            # A stored path outside our directories is not served. Fall through
+            # and regenerate into the location we control.
+            pass
 
     generated = create_invoice_pdf(invoice_id)
     if generated["status"] != "created":
-        raise DocumentUnavailable(
-            generated.get("error", "The invoice document could not be generated.")
-        )
-    return Path(generated["pdf_path"])
+        raise DocumentUnavailable("The invoice document could not be generated.")
+    try:
+        return resolve_document(generated["pdf_path"], _document_dirs())
+    except UnsafePath as exc:
+        raise DocumentUnavailable(safe_detail(exc, "The document is unavailable.")) from exc
 
 
 # --- payments --------------------------------------------------------------
@@ -114,14 +135,16 @@ def invoice_pdf(invoice_id: int) -> Path:
 
 def payments(invoice_id: int | None = None, client_id: int | None = None,
              limit: int = 100) -> dict:
-    return list_payments(invoice_id=invoice_id, client_id=client_id, limit=limit)
+    return scrub(
+        list_payments(invoice_id=invoice_id, client_id=client_id, limit=limit)
+    )
 
 
 def payment_detail(payment_id: int) -> dict:
     result = get_payment(payment_id=payment_id)
     if result["status"] != "found":
         raise NotFound("payment", payment_id)
-    return result
+    return scrub(result)
 
 
 def receipt_pdf(payment_id: int) -> Path:
@@ -135,21 +158,22 @@ def receipt_pdf(payment_id: int) -> Path:
         raise NotFound("payment", payment_id)
 
     existing = result["payment"].get("receipt_path")
-    if existing and Path(existing).exists():
-        return Path(existing)
+    if existing:
+        try:
+            return resolve_document(existing, _document_dirs())
+        except UnsafePath:
+            pass
 
     generated = create_receipt_pdf(payment_id)
     if generated["status"] == "not_found":
         raise NotFound("payment", payment_id)
     if generated["status"] == "error":
-        raise DocumentUnavailable(
-            generated.get("error", "The receipt could not be generated.")
-        )
+        raise DocumentUnavailable("The receipt could not be generated.")
 
-    path = Path(generated["receipt_path"])
-    if not path.exists():
-        raise DocumentUnavailable("The receipt file is missing from disk.")
-    return path
+    try:
+        return resolve_document(generated["receipt_path"], _document_dirs())
+    except UnsafePath as exc:
+        raise DocumentUnavailable(safe_detail(exc, "The receipt is unavailable.")) from exc
 
 
 # --- reports ---------------------------------------------------------------
@@ -159,12 +183,12 @@ def summary(start_date: str | None = None, end_date: str | None = None) -> dict:
     result = get_financial_summary(start_date=start_date, end_date=end_date)
     if result["status"] == "error":
         raise ValueError(result["error"])
-    return result
+    return scrub(result)
 
 
 def overdue(client_id: int | None = None) -> dict:
-    return get_overdue_invoices(client_id=client_id)
+    return scrub(get_overdue_invoices(client_id=client_id))
 
 
 def outstanding(client_id: int | None = None) -> dict:
-    return get_outstanding_invoices(client_id=client_id)
+    return scrub(get_outstanding_invoices(client_id=client_id))

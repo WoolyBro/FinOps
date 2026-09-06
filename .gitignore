@@ -7,3 +7,12 @@ data/documents/
 data/invoices/
 data/receipts/
 .pytest_cache/
+
+# Never commit credentials or key material.
+.env.*
+!.env.example
+.aws/
+*.pem
+*.key
+*.pfx
+credentials

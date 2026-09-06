@@ -76,7 +76,8 @@ export type Invoice = {
   invoice_status: "UNPAID" | "PARTIALLY_PAID" | "PAID" | "CANCELLED";
   is_overdue: boolean;
   days_overdue: number;
-  pdf_path: string | null;
+  /** Whether the document exists. The server never sends its path. */
+  pdf_available: boolean;
 };
 
 export type Payment = {
