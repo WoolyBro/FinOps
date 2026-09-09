@@ -186,6 +186,19 @@ def diagnose_failure(exc: BaseException, model_id: str, region: str | None) -> s
     name = type(exc).__name__
     text = str(exc)
 
+    # A brand-new AWS account is held for verification, and Bedrock reports it
+    # as AccessDenied. Checked before the generic branch, because "enable model
+    # access" is actively misleading advice here -- there is nothing to fix.
+    if "being verified" in text or "account is currently being verified" in text:
+        return (
+            "This AWS account is still being verified by AWS.\n"
+            "  Nothing is misconfigured -- credentials, region and model are all\n"
+            "  correct. New accounts are held for verification, normally under\n"
+            "  two hours. Retry after that.\n"
+            "  If it persists beyond a few hours, AWS asks you to contact\n"
+            "  aws-verification@amazon.com."
+        )
+
     if "AccessDenied" in name or "AccessDenied" in text:
         return (
             f"Bedrock refused the call for {model_id} in {region}.\n"

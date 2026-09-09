@@ -12,6 +12,10 @@ pypdf>=5.0
 # AgentCore Runtime
 bedrock-agentcore>=0.1
 
+# Required to read credentials issued by `aws login`, which the CLI stores in a
+# format the plain botocore credential chain cannot decrypt.
+botocore[crt]>=1.43
+
 # API
 fastapi>=0.115
 uvicorn>=0.30

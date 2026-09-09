@@ -226,3 +226,23 @@ def test_live_check_preflight_flag_stops_before_the_model(monkeypatch, capsys):
 
     assert live_check.main(["--preflight"]) == 0
     assert "No model was called" in capsys.readouterr().out
+
+
+def test_account_verification_is_not_reported_as_a_model_access_problem():
+    """A new AWS account in verification reports AccessDenied.
+
+    Telling the user to enable model access there sends them hunting for a
+    problem that does not exist -- the account simply is not released yet.
+    """
+    message = diagnose_failure(
+        Exception(
+            "An error occurred (AccessDeniedException) when calling the Converse "
+            "operation: Your account is currently being verified. Verification "
+            "normally takes less than 2 hours."
+        ),
+        "global.anthropic.claude-sonnet-4-6",
+        "ap-south-1",
+    )
+    assert "still being verified" in message
+    assert "Nothing is misconfigured" in message
+    assert "Model access" not in message
