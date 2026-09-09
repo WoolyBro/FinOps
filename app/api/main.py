@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.responses import UTF8JSONResponse
-from app.api.routers import chat, records, reports
+from app.api.routers import chat, commands, records, reports
 from app.database import init_db
 
 API_PREFIX = "/api"
@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(chat.router, prefix=API_PREFIX)
+    app.include_router(commands.router, prefix=API_PREFIX)
     app.include_router(records.router, prefix=API_PREFIX)
     app.include_router(reports.router, prefix=API_PREFIX)
 
@@ -148,6 +149,7 @@ def _code_for(status_code: int) -> str:
     return {
         400: "bad_request",
         404: "not_found",
+        409: "conflict",
         405: "method_not_allowed",
         422: "invalid_request",
         502: "document_unavailable",

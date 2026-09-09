@@ -293,7 +293,8 @@ def test_unknown_route_is_a_clean_404(client):
 
 
 def test_wrong_method_is_reported_cleanly(client):
-    response = client.post("/api/invoices")
+    # POST /api/invoices creates an invoice, so use a method nothing supports.
+    response = client.put("/api/invoices")
     assert response.status_code == 405
     assert response.json()["error"] == "method_not_allowed"
 

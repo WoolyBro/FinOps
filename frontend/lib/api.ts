@@ -20,6 +20,21 @@ export class ApiError extends Error {
   }
 }
 
+export type ParsedAmount = {
+  amount_minor: number;
+  currency: string;
+  amount_display: string;
+};
+
+export type Reminder = {
+  reminder_id: number;
+  invoice_id: number;
+  invoice_number: string;
+  client_name: string;
+  message: string;
+  reminder_status: string;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -192,6 +207,59 @@ export const api = {
       invoices: Invoice[];
       outstanding_total: CurrencyTotal[];
     }>("/api/reports/outstanding"),
+
+  // --- writes ---------------------------------------------------------
+
+  parseAmount: (text: string, defaultCurrency = "INR") =>
+    request<ParsedAmount>("/api/amounts/parse", {
+      method: "POST",
+      body: JSON.stringify({ text, default_currency: defaultCurrency }),
+    }),
+
+  createClient: (body: {
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+  }) =>
+    request<{ status: string; client: Client }>("/api/clients", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  createInvoice: (body: {
+    client_id: number;
+    project: string;
+    amount_minor: number;
+    currency?: string;
+    issue_date?: string | null;
+    due_date?: string | null;
+    description?: string | null;
+    allow_duplicate?: boolean;
+  }) =>
+    request<{ status: string; invoice: Invoice }>("/api/invoices", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  recordPayment: (body: {
+    invoice_id: number;
+    amount_minor: number;
+    payment_date?: string | null;
+    method?: string | null;
+    reference?: string | null;
+    allow_duplicate?: boolean;
+  }) =>
+    request<{ status: string; payment: Payment; invoice: Invoice }>(
+      "/api/payments",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  createReminder: (invoiceId: number, force = false) =>
+    request<{ status: string; reminder: Reminder }>("/api/reminders", {
+      method: "POST",
+      body: JSON.stringify({ invoice_id: invoiceId, force }),
+    }),
 
   invoicePdfUrl: (id: number) => `${API_BASE}/api/invoices/${id}/pdf`,
   receiptPdfUrl: (paymentId: number) =>
