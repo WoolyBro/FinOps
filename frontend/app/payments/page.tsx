@@ -28,7 +28,10 @@ export default function PaymentsPage() {
         {payments === null && !error ? (
           <Loading what="payments" />
         ) : payments && payments.length === 0 ? (
-          <Empty>No payments recorded yet.</Empty>
+          <Empty>
+            <strong>No payments yet</strong>
+            Record one against an invoice and the balance updates here.
+          </Empty>
         ) : (
           <div className="table-scroll">
             <table>
@@ -47,9 +50,9 @@ export default function PaymentsPage() {
                 {payments?.map((payment) => (
                   <tr key={payment.payment_id}>
                     <td className="muted">{formatDate(payment.payment_date)}</td>
-                    <td>{payment.client_name}</td>
+                    <td className="strong">{payment.client_name}</td>
                     <td className="mono">{payment.invoice_number}</td>
-                    <td className="num">{payment.amount_display}</td>
+                    <td className="num strong">{payment.amount_display}</td>
                     <td className="num muted">
                       {payment.outstanding_after_display}
                     </td>

@@ -70,15 +70,19 @@ export default function InvoicesPage() {
 
       {error ? <LoadError error={error} /> : null}
 
-      <div className="actions" style={{ marginBottom: 14 }}>
+      <div className="segmented" role="group" aria-label="Filter invoices">
         {(["ALL", "UNPAID", "PARTIALLY_PAID", "PAID", "OVERDUE"] as Filter[]).map(
           (option) => (
             <button
               key={option}
-              className={`btn ${filter === option ? "primary" : ""}`}
+              aria-pressed={filter === option}
               onClick={() => setFilter(option)}
             >
-              {option.replace("_", " ")}
+              {option === "ALL"
+                ? "All"
+                : option === "PARTIALLY_PAID"
+                  ? "Partially paid"
+                  : option.charAt(0) + option.slice(1).toLowerCase()}
             </button>
           ),
         )}
@@ -89,42 +93,59 @@ export default function InvoicesPage() {
           <Loading what="invoices" />
         ) : shown.length === 0 ? (
           <Empty>
-            {invoices?.length === 0
-              ? "No invoices yet. Create one to get started."
-              : "No invoices match this filter."}
+            {invoices?.length === 0 ? (
+              <>
+                <strong>No invoices yet</strong>
+                Raise your first one and it will appear here with its balance.
+              </>
+            ) : (
+              <>
+                <strong>Nothing matches this filter</strong>
+                Try a different status.
+              </>
+            )}
           </Empty>
         ) : (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
+                  <th className="num">Amount</th>
                   <th>Invoice</th>
                   <th>Client</th>
-                  <th>Project</th>
-                  <th className="num">Amount</th>
-                  <th className="num">Paid</th>
-                  <th className="num">Outstanding</th>
-                  <th>Due</th>
                   <th>Status</th>
+                  <th>Due</th>
                   <th className="num">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {shown.map((invoice) => (
                   <tr key={invoice.invoice_id}>
+                    <td className="num">
+                      <div className="cell-stack" style={{ alignItems: "flex-end" }}>
+                        <span className="lead">{invoice.amount_display}</span>
+                        {invoice.outstanding_minor > 0 &&
+                        invoice.amount_paid_minor > 0 ? (
+                          <span className="sub">
+                            {invoice.outstanding_display} outstanding
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="mono">{invoice.invoice_number}</td>
-                    <td>{invoice.client_name}</td>
-                    <td className="muted">{invoice.project}</td>
-                    <td className="num">{invoice.amount_display}</td>
-                    <td className="num muted">{invoice.amount_paid_display}</td>
-                    <td className="num">{invoice.outstanding_display}</td>
-                    <td className="muted">{formatDate(invoice.due_date)}</td>
+                    <td>
+                      <div className="cell-stack">
+                        <span className="lead">{invoice.client_name}</span>
+                        <span className="sub">{invoice.project}</span>
+                      </div>
+                    </td>
                     <td>
                       <StatusBadge invoice={invoice} />
                       <OverdueBadge invoice={invoice} />
                     </td>
+                    <td className="muted">{formatDate(invoice.due_date)}</td>
                     <td className="num">
-                      <div className="actions" style={{ justifyContent: "flex-end" }}>
+                      <div className="row-actions">
                         {invoice.outstanding_minor > 0 &&
                         invoice.invoice_status !== "CANCELLED" ? (
                           <button
