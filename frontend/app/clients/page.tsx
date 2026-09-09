@@ -18,6 +18,7 @@ import {
   StatusBadge,
   formatDate,
 } from "@/components/common";
+import { NewClientForm, NewInvoiceForm } from "@/components/forms";
 
 type Detail = {
   balance: ClientBalance;
@@ -30,16 +31,19 @@ export default function ClientsPage() {
   const [selected, setSelected] = useState<number | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const [addingClient, setAddingClient] = useState(false);
+  const [invoicing, setInvoicing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     api
       .clients()
       .then((r) => {
         setClients(r.clients);
-        if (r.clients.length > 0) setSelected(r.clients[0].client_id);
+        setSelected((current) => current ?? r.clients[0]?.client_id ?? null);
       })
       .catch((err) => setError(err as ApiError));
-  }, []);
+  }, [reloadKey]);
 
   useEffect(() => {
     if (selected === null) return;
@@ -48,15 +52,29 @@ export default function ClientsPage() {
       .client(selected)
       .then(setDetail)
       .catch((err) => setError(err as ApiError));
-  }, [selected]);
+  }, [selected, reloadKey]);
 
   return (
     <>
-      <h1 className="page-title">Clients</h1>
-      <p className="page-sub">
-        Balances are the sum of what each client has been invoiced, less what
-        the ledger says they have paid.
-      </p>
+      <div className="page-head">
+        <div>
+          <h1 className="page-title">Clients</h1>
+          <p className="page-sub">
+            Balances are the sum of what each client has been invoiced, less
+            what the ledger says they have paid.
+          </p>
+        </div>
+        <div className="actions">
+          {selected ? (
+            <button className="btn" onClick={() => setInvoicing(true)}>
+              + Invoice this client
+            </button>
+          ) : null}
+          <button className="btn primary" onClick={() => setAddingClient(true)}>
+            + New client
+          </button>
+        </div>
+      </div>
 
       {error ? <LoadError error={error} /> : null}
 
@@ -70,7 +88,7 @@ export default function ClientsPage() {
           </div>
 
           {selected === null ? (
-            <Empty>No clients yet. Ask the agent to add one.</Empty>
+            <Empty>No clients yet. Add one to get started.</Empty>
           ) : detail === null && !error ? (
             <Loading what="this client" />
           ) : detail ? (
@@ -220,6 +238,21 @@ export default function ClientsPage() {
           )}
         </div>
       </div>
+    {addingClient ? (
+        <NewClientForm
+          onClose={() => setAddingClient(false)}
+          onDone={() => setReloadKey((k) => k + 1)}
+        />
+      ) : null}
+
+      {invoicing && selected ? (
+        <NewInvoiceForm
+          clients={clients ?? []}
+          presetClientId={selected}
+          onClose={() => setInvoicing(false)}
+          onDone={() => setReloadKey((k) => k + 1)}
+        />
+      ) : null}
     </>
   );
 }
