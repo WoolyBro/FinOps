@@ -336,7 +336,7 @@ class StubAgentService:
             return {
                 "available": True,
                 "provider": "bedrock",
-                "model_id": "global.anthropic.claude-sonnet-4-6",
+                "model_id": "apac.amazon.nova-pro-v1:0",
                 "detail": None,
                 "active_sessions": 0,
             }

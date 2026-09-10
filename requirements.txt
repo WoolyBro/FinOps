@@ -1,4 +1,4 @@
-# Claude runs on Amazon Bedrock (boto3 ships with strands-agents).
+# The model runs on Amazon Bedrock (boto3 ships with strands-agents).
 # The ollama extra is the credential-free local development path.
 strands-agents[ollama]>=1.54
 strands-agents-tools>=0.8

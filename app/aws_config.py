@@ -55,7 +55,7 @@ _MISSING = (
     "  Set FF_AWS_REGION (preferred), AWS_REGION, or AWS_DEFAULT_REGION.\n"
     f"  Suggested: {SUGGESTED_REGION}\n"
     "  The region must be one where AgentCore Runtime is available AND where\n"
-    "  you have enabled model access for the Claude model you are using."
+    "  you have enabled model access for the model you are using."
 )
 
 
