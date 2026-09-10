@@ -19,6 +19,7 @@ from app.security import UnsafePath, resolve_document, safe_detail, scrub
 from app.tools.clients import find_client, list_clients
 from app.tools.invoices import get_invoice, list_invoices
 from app.tools.payments import get_payment, list_payments
+from app.tools.reminders import list_reminders
 from app.tools.reports import (
     get_client_balance,
     get_financial_summary,
@@ -174,6 +175,23 @@ def receipt_pdf(payment_id: int) -> Path:
         return resolve_document(generated["receipt_path"], _document_dirs())
     except UnsafePath as exc:
         raise DocumentUnavailable(safe_detail(exc, "The receipt is unavailable.")) from exc
+
+
+# --- reminders -------------------------------------------------------------
+
+
+def reminders(
+    invoice_id: int | None = None,
+    client_id: int | None = None,
+    status: str | None = None,
+    limit: int = 100,
+) -> dict:
+    result = list_reminders(
+        invoice_id=invoice_id, client_id=client_id, status=status, limit=limit
+    )
+    if result["status"] == "error":
+        raise ValueError(result["error"])
+    return scrub(result)
 
 
 # --- reports ---------------------------------------------------------------

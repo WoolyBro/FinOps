@@ -1,58 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  ApiError,
-  api,
-  totalsText,
-  type Client,
-  type ClientBalance,
-  type Invoice,
-  type Payment,
-} from "@/lib/api";
-import {
-  Empty,
-  LoadError,
-  Loading,
-  OverdueBadge,
-  StatusBadge,
-  formatDate,
-} from "@/components/common";
-import { NewClientForm, NewInvoiceForm } from "@/components/forms";
-
-type Detail = {
-  balance: ClientBalance;
-  invoices: Invoice[];
-  payments: Payment[];
-};
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { ApiError, api, type Client } from "@/lib/api";
+import { Empty, LoadError, Loading, formatDate } from "@/components/common";
+import { NewClientForm } from "@/components/forms";
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[] | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [addingClient, setAddingClient] = useState(false);
-  const [invoicing, setInvoicing] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .clients()
-      .then((r) => {
-        setClients(r.clients);
-        setSelected((current) => current ?? r.clients[0]?.client_id ?? null);
+      .then((body) => {
+        setClients(body.clients);
+        setError(null);
       })
       .catch((err) => setError(err as ApiError));
-  }, [reloadKey]);
+  }, []);
 
-  useEffect(() => {
-    if (selected === null) return;
-    setDetail(null);
-    api
-      .client(selected)
-      .then(setDetail)
-      .catch((err) => setError(err as ApiError));
-  }, [selected, reloadKey]);
+  useEffect(load, [load]);
+
+  const shown = (clients ?? []).filter((client) =>
+    `${client.name} ${client.email ?? ""}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
 
   return (
     <>
@@ -60,17 +37,12 @@ export default function ClientsPage() {
         <div>
           <h1 className="page-title">Clients</h1>
           <p className="page-sub">
-            Balances are the sum of what each client has been invoiced, less
-            what the ledger says they have paid.
+            Names are deduplicated, so the same client cannot end up on the
+            books twice under different spellings.
           </p>
         </div>
         <div className="actions">
-          {selected ? (
-            <button className="btn" onClick={() => setInvoicing(true)}>
-              + Invoice this client
-            </button>
-          ) : null}
-          <button className="btn primary" onClick={() => setAddingClient(true)}>
+          <button className="btn primary" onClick={() => setAdding(true)}>
             + New client
           </button>
         </div>
@@ -78,181 +50,89 @@ export default function ClientsPage() {
 
       {error ? <LoadError error={error} /> : null}
 
-      <div className="agent-layout with-side">
-        <div className="panel">
-          <div className="panel-head">
-            <h2>Client</h2>
-            <span className="hint">
-              {detail ? `${detail.balance.invoice_count} invoices` : ""}
-            </span>
-          </div>
-
-          {selected === null ? (
-            <Empty>No clients yet. Add one to get started.</Empty>
-          ) : detail === null && !error ? (
-            <Loading what="this client" />
-          ) : detail ? (
-            <div className="panel-body">
-              <div className="stat-row" style={{ marginBottom: 18 }}>
-                <div className="stat">
-                  <div className="label">Invoiced</div>
-                  <div className="value">
-                    {totalsText(detail.balance.invoiced_total, "₹0.00")}
-                  </div>
-                </div>
-                <div className="stat">
-                  <div className="label">Paid</div>
-                  <div className="value">
-                    {totalsText(detail.balance.paid_total, "₹0.00")}
-                  </div>
-                </div>
-                <div className="stat">
-                  <div className="label">Outstanding</div>
-                  <div className="value">
-                    {totalsText(detail.balance.outstanding_total, "₹0.00")}
-                  </div>
-                </div>
-                <div className="stat">
-                  <div className="label">Overdue</div>
-                  <div className="value overdue">
-                    {totalsText(detail.balance.overdue_total, "₹0.00")}
-                  </div>
-                </div>
-              </div>
-
-              <h3 style={{ fontSize: 12, margin: "0 0 8px" }}>
-                Invoice history
-              </h3>
-              {detail.invoices.length === 0 ? (
-                <div className="faint">No invoices for this client.</div>
-              ) : (
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Invoice</th>
-                        <th>Project</th>
-                        <th className="num">Amount</th>
-                        <th className="num">Outstanding</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detail.invoices.map((invoice) => (
-                        <tr key={invoice.invoice_id}>
-                          <td className="mono">{invoice.invoice_number}</td>
-                          <td className="muted">{invoice.project}</td>
-                          <td className="num">{invoice.amount_display}</td>
-                          <td className="num">
-                            {invoice.outstanding_display}
-                          </td>
-                          <td>
-                            <StatusBadge invoice={invoice} />
-                            <OverdueBadge invoice={invoice} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <h3 style={{ fontSize: 12, margin: "20px 0 8px" }}>Payments</h3>
-              {detail.payments.length === 0 ? (
-                <div className="faint">Nothing received yet.</div>
-              ) : (
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Invoice</th>
-                        <th className="num">Amount</th>
-                        <th>Receipt</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detail.payments.map((payment) => (
-                        <tr key={payment.payment_id}>
-                          <td className="muted">
-                            {formatDate(payment.payment_date)}
-                          </td>
-                          <td className="mono">{payment.invoice_number}</td>
-                          <td className="num">{payment.amount_display}</td>
-                          <td>
-                            <a
-                              className="btn"
-                              href={api.receiptPdfUrl(payment.payment_id)}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              {payment.receipt_number ?? "Receipt"}
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="panel">
-          <div className="panel-head">
-            <h2>All clients</h2>
-            <span className="hint">{clients?.length ?? 0}</span>
-          </div>
-          {clients === null && !error ? (
-            <Loading what="clients" />
-          ) : clients && clients.length === 0 ? (
-            <Empty>No clients yet.</Empty>
-          ) : (
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients?.map((client) => (
-                    <tr
-                      key={client.client_id}
-                      onClick={() => setSelected(client.client_id)}
-                      style={{
-                        cursor: "pointer",
-                        background:
-                          client.client_id === selected ? "#f2f2ee" : undefined,
-                      }}
-                    >
-                      <td>{client.name}</td>
-                      <td className="muted">{client.email ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+      <div className="filter-bar">
+        <input
+          className="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search clients"
+          aria-label="Search clients"
+        />
+        <span className="range-caption">
+          {clients ? `${shown.length} of ${clients.length}` : ""}
+        </span>
       </div>
-    {addingClient ? (
+
+      <div className="panel">
+        {clients === null && !error ? (
+          <Loading what="clients" />
+        ) : shown.length === 0 ? (
+          <Empty>
+            <strong>
+              {clients?.length === 0 ? "No clients yet" : "No matches"}
+            </strong>
+            {clients?.length === 0
+              ? "Add your first client, then raise an invoice against them."
+              : "Try a different search."}
+          </Empty>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Added</th>
+                  <th className="num"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((client) => (
+                  <tr key={client.client_id}>
+                    <td>
+                      <Link
+                        className="link strong"
+                        href={`/clients/${client.client_id}`}
+                      >
+                        {client.name}
+                      </Link>
+                    </td>
+                    <td className="muted">{client.email ?? "—"}</td>
+                    <td className="muted">{client.phone ?? "—"}</td>
+                    <td className="muted">
+                      {client.created_at
+                        ? formatDate(client.created_at.slice(0, 10))
+                        : "—"}
+                    </td>
+                    <td className="num">
+                      <Link
+                        className="btn"
+                        href={`/clients/${client.client_id}`}
+                      >
+                        Open
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {adding ? (
         <NewClientForm
-          onClose={() => setAddingClient(false)}
-          onDone={() => setReloadKey((k) => k + 1)}
+          onClose={() => setAdding(false)}
+          onDone={() => {
+            load();
+            setToast("Client added");
+            setTimeout(() => setToast(null), 3000);
+          }}
         />
       ) : null}
 
-      {invoicing && selected ? (
-        <NewInvoiceForm
-          clients={clients ?? []}
-          presetClientId={selected}
-          onClose={() => setInvoicing(false)}
-          onDone={() => setReloadKey((k) => k + 1)}
-        />
-      ) : null}
+      {toast ? <div className="toast">{toast}</div> : null}
     </>
   );
 }
