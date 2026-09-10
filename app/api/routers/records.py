@@ -124,3 +124,30 @@ def get_receipt_pdf(payment_id: int) -> FileResponse:
         raise _document_unavailable(exc) from exc
 
     return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
+# --- reminders -------------------------------------------------------------
+
+
+@router.get("/reminders")
+def get_reminders(
+    invoice_id: int | None = None,
+    client_id: int | None = None,
+    reminder_status: str | None = Query(
+        None, alias="status", description="DRAFT, APPROVED, SENT or CANCELLED."
+    ),
+    limit: int = Query(100, ge=1, le=200),
+) -> dict:
+    """Reminders that have been drafted. Nothing here has been sent."""
+    try:
+        return data_service.reminders(
+            invoice_id=invoice_id,
+            client_id=client_id,
+            status=reminder_status,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"error": "invalid_request", "detail": str(exc)},
+        ) from exc

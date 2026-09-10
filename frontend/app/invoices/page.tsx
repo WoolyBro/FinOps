@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { ApiError, api, type Client, type Invoice } from "@/lib/api";
 import {
   Empty,
@@ -132,7 +133,11 @@ export default function InvoicesPage() {
                         ) : null}
                       </div>
                     </td>
-                    <td className="mono">{invoice.invoice_number}</td>
+                    <td className="mono">
+                      <Link className="link" href={`/invoices/${invoice.invoice_id}`}>
+                        {invoice.invoice_number}
+                      </Link>
+                    </td>
                     <td>
                       <div className="cell-stack">
                         <span className="lead">{invoice.client_name}</span>

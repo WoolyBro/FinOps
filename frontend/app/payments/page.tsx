@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ApiError, api, type Payment } from "@/lib/api";
 import { Empty, LoadError, Loading, formatDate } from "@/components/common";
 
@@ -51,7 +52,11 @@ export default function PaymentsPage() {
                   <tr key={payment.payment_id}>
                     <td className="muted">{formatDate(payment.payment_date)}</td>
                     <td className="strong">{payment.client_name}</td>
-                    <td className="mono">{payment.invoice_number}</td>
+                    <td className="mono">
+                      <Link className="link" href={`/invoices/${payment.invoice_id}`}>
+                        {payment.invoice_number}
+                      </Link>
+                    </td>
                     <td className="num strong">{payment.amount_display}</td>
                     <td className="num muted">
                       {payment.outstanding_after_display}

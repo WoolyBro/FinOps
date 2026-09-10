@@ -30,9 +30,15 @@ export type Reminder = {
   reminder_id: number;
   invoice_id: number;
   invoice_number: string;
+  client_id: number;
   client_name: string;
+  client_email: string | null;
+  project: string;
+  channel: string;
   message: string;
-  reminder_status: string;
+  reminder_status: "DRAFT" | "APPROVED" | "SENT" | "CANCELLED";
+  created_at: string;
+  sent_at: string | null;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -254,6 +260,42 @@ export const api = {
       "/api/payments",
       { method: "POST", body: JSON.stringify(body) },
     ),
+
+  reminders: (params?: { status?: string; client_id?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set("status", params.status);
+    if (params?.client_id) query.set("client_id", String(params.client_id));
+    const suffix = query.toString() ? `?${query}` : "";
+    return request<{ count: number; reminders: Reminder[] }>(
+      `/api/reminders${suffix}`,
+    );
+  },
+
+  approveReminder: (reminderId: number) =>
+    request<{ status: string; reminder: Reminder }>(
+      `/api/reminders/${reminderId}/approve`,
+      { method: "POST" },
+    ),
+
+  payment: (id: number) =>
+    request<{ status: string; payment: Payment }>(`/api/payments/${id}`),
+
+  invoice: (id: number) =>
+    request<{ invoice: Invoice; payments: Payment[] }>(`/api/invoices/${id}`),
+
+  summaryFor: (start?: string, end?: string) => {
+    const query = new URLSearchParams();
+    if (start) query.set("start_date", start);
+    if (end) query.set("end_date", end);
+    const suffix = query.toString() ? `?${query}` : "";
+    return request<Summary>(`/api/reports/summary${suffix}`);
+  },
+
+  updateClient: (id: number, field: string, value: string) =>
+    request<{ status: string; client: Client }>(`/api/clients/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ field, value }),
+    }),
 
   createReminder: (invoiceId: number, force = false) =>
     request<{ status: string; reminder: Reminder }>("/api/reminders", {

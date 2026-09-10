@@ -38,14 +38,56 @@ const icons = {
       <path d="M1.75 6.75h12.5" />
     </svg>
   ),
+  overdue: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 4.75V8l2.25 1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  reminders: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M4 6.5a4 4 0 1 1 8 0c0 3 1.25 4 1.25 4H2.75S4 9.5 4 6.5" />
+      <path d="M6.5 13a1.6 1.6 0 0 0 3 0" strokeLinecap="round" />
+    </svg>
+  ),
+  reports: (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M2.25 13.75h11.5" strokeLinecap="round" />
+      <rect x="3.25" y="8" width="2.5" height="4" rx="0.75" />
+      <rect x="6.75" y="5" width="2.5" height="7" rx="0.75" />
+      <rect x="10.25" y="2.5" width="2.5" height="9.5" rx="0.75" />
+    </svg>
+  ),
 };
 
-const LINKS = [
-  { href: "/", label: "Overview", icon: icons.overview },
-  { href: "/agent", label: "Agent", icon: icons.agent },
-  { href: "/invoices", label: "Invoices", icon: icons.invoices },
-  { href: "/clients", label: "Clients", icon: icons.clients },
-  { href: "/payments", label: "Payments", icon: icons.payments },
+/** Grouped so the nav reads as the shape of the work, not a flat list. */
+const GROUPS = [
+  {
+    label: null,
+    links: [
+      { href: "/", label: "Overview", icon: icons.overview },
+      { href: "/agent", label: "Agent", icon: icons.agent },
+    ],
+  },
+  {
+    label: "Billing",
+    links: [
+      { href: "/invoices", label: "Invoices", icon: icons.invoices },
+      { href: "/clients", label: "Clients", icon: icons.clients },
+      { href: "/payments", label: "Payments", icon: icons.payments },
+    ],
+  },
+  {
+    label: "Collections",
+    links: [
+      { href: "/overdue", label: "Overdue", icon: icons.overdue },
+      { href: "/reminders", label: "Reminders", icon: icons.reminders },
+    ],
+  },
+  {
+    label: "Insights",
+    links: [{ href: "/reports", label: "Reports", icon: icons.reports }],
+  },
 ];
 
 export function Sidebar() {
@@ -73,16 +115,29 @@ export function Sidebar() {
       </div>
 
       <nav className="nav">
-        {LINKS.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={pathname === link.href ? "active" : ""}
-            aria-current={pathname === link.href ? "page" : undefined}
-          >
-            {link.icon}
-            {link.label}
-          </Link>
+        {GROUPS.map((group, index) => (
+          <div key={group.label ?? index} className="nav-group">
+            {group.label ? (
+              <div className="nav-label">{group.label}</div>
+            ) : null}
+            {group.links.map((link) => {
+              // A detail page keeps its section highlighted.
+              const active =
+                pathname === link.href ||
+                (link.href !== "/" && pathname.startsWith(`${link.href}/`));
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={active ? "active" : ""}
+                  aria-current={active ? "page" : undefined}
+                >
+                  {link.icon}
+                  {link.label}
+                </Link>
+              );
+            })}
+          </div>
         ))}
       </nav>
 

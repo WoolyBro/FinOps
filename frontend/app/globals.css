@@ -161,6 +161,12 @@ a {
   gap: 1px;
 }
 
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .nav-label {
   font-size: 11px;
   font-weight: 600;
@@ -1096,4 +1102,197 @@ td.strong {
   .field-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* --- detail pages --------------------------------------------------------- */
+
+.back-link {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink-muted);
+  margin-bottom: 14px;
+  transition: color 110ms ease;
+}
+
+.back-link:hover {
+  color: var(--accent-ink);
+}
+
+.link {
+  color: var(--accent-ink);
+  font-weight: 550;
+}
+
+.link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.page-title .badge {
+  vertical-align: middle;
+  margin-left: 8px;
+  font-size: 11.5px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (min-width: 1100px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  }
+}
+
+.definitions {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+  gap: 10px 18px;
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.definitions dt {
+  color: var(--ink-muted);
+  font-weight: 550;
+}
+
+.definitions dd {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Payment progress against the invoice total. */
+.progress {
+  height: 5px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 320ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+/* --- filter bar ----------------------------------------------------------- */
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.filter-bar .segmented {
+  margin-bottom: 0;
+}
+
+.range-caption {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.range-inputs {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.range-inputs label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  font-weight: 550;
+}
+
+.range-inputs input,
+.search {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--ink-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+.search {
+  min-width: 260px;
+}
+
+.range-inputs input:focus,
+.search:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 91, 255, 0.16);
+}
+
+/* --- section labels ------------------------------------------------------- */
+
+.section-label {
+  font-size: 11.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+  margin: 4px 0 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.section-note {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+/* --- reminders ------------------------------------------------------------ */
+
+.reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.reminder .panel-head {
+  align-items: flex-start;
+}
+
+.reminder-message {
+  margin: 0;
+  padding: 13px 15px;
+  background: var(--surface-sunken);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-body);
+}
+
+.reminder-meta {
+  margin: 11px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.reminder-meta strong {
+  color: var(--ink-body);
+  font-weight: 550;
 }
