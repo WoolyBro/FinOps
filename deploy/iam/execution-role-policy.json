@@ -13,7 +13,13 @@
     "",
     "GetWorkloadAccessToken* from the AWS reference policy is omitted: this",
     "agent does not use AgentCore Identity. Add it only if you adopt OAuth",
-    "inbound auth or outbound credential providers."
+    "inbound auth or outbound credential providers.",
+    "",
+    "Model resources below scope to Amazon Nova, the default model",
+    "(app/model_provider.py:BEDROCK_MODEL_ID). If FF_MODEL_ID overrides that,",
+    "update these two ARNs to match -- the pattern is the same for any",
+    "Bedrock model: the foundation-model ARN the profile ultimately invokes,",
+    "plus the inference-profile ARN itself."
   ],
   "Version": "2012-10-17",
   "Statement": [
@@ -25,8 +31,8 @@
         "bedrock:InvokeModelWithResponseStream"
       ],
       "Resource": [
-        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6*",
-        "arn:aws:bedrock:REGION:ACCOUNT_ID:inference-profile/global.anthropic.claude-sonnet-4-6"
+        "arn:aws:bedrock:*::foundation-model/amazon.nova-pro-v1:0",
+        "arn:aws:bedrock:REGION:ACCOUNT_ID:inference-profile/apac.amazon.nova-pro-v1:0"
       ]
     },
     {

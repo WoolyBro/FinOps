@@ -1,7 +1,9 @@
 """Provider resolution: Bedrock in production, Ollama locally, Anthropic never.
 
-This project runs Claude through Amazon Bedrock. The Anthropic API is not a
-supported path, and no part of the app may require an ANTHROPIC_API_KEY.
+This project runs on Amazon Bedrock, defaulting to Amazon Nova. The Anthropic
+API is not a supported path -- direct or otherwise -- and no part of the app
+may require an ANTHROPIC_API_KEY, regardless of which Bedrock model is
+selected via FF_MODEL_ID.
 """
 
 import pytest

@@ -48,14 +48,23 @@ cp .env.example .env
 
 ### Choosing a model provider
 
-FreelanceFlow runs Claude on **Amazon Bedrock**. It does not use the Anthropic
-API, and nothing in the app requires an `ANTHROPIC_API_KEY` — a key being
-present in the environment changes nothing, and there is a test asserting that.
+FreelanceFlow runs on **Amazon Bedrock**. It does not use the Anthropic API (or
+any other vendor's API) directly, and nothing in the app requires an
+`ANTHROPIC_API_KEY` — a key being present in the environment changes nothing,
+and there is a test asserting that.
+
+The default model is **Amazon Nova** (`apac.amazon.nova-pro-v1:0`), AWS's own
+first-party model on Bedrock, chosen deliberately over Anthropic's Bedrock
+models: first-party AWS models need only the ordinary one-click model-access
+grant, while third-party models (Anthropic, Meta, Mistral) additionally require
+accepting a usage-terms agreement before Bedrock will authorize them — one
+fewer gate to clear. Override with `FF_MODEL_ID` for any other model this
+account has been granted.
 
 | `FF_MODEL_PROVIDER` | Uses | Needs |
 |---|---|---|
 | `auto` (default) | Bedrock if AWS credentials resolve, else Ollama if it is running | one of the two below |
-| `bedrock` | Claude on Amazon Bedrock — **production** | `aws configure` + Claude enabled under Bedrock → Model access |
+| `bedrock` | Amazon Nova on Amazon Bedrock — **production** | `aws configure` + Nova enabled under Bedrock → Model access |
 | `ollama` | A local model — **development without AWS** | Ollama running on `localhost:11434` |
 
 `auto` probes for Ollama with a half-second socket check. Asking for a provider
@@ -73,8 +82,8 @@ they need your AWS account.
 
 1. **Create an IAM user** with programmatic access. For least privilege, use
    `deploy/iam/execution-role-policy.json` rather than a `FullAccess` policy.
-2. **Enable model access** in the Bedrock console → *Model access* → **Anthropic
-   Claude**. Model access is granted *per region*; credentials alone are not
+2. **Enable model access** in the Bedrock console → *Model access* → **Amazon
+   Nova**. Model access is granted *per region*; credentials alone are not
    enough, and this is the step people miss.
 3. **Configure credentials** (`aws configure`, a profile, or an SSO session).
    `model_provider.py` resolves whatever botocore can find.
@@ -156,7 +165,8 @@ pytest -q                             # 476 tests, live ones skipped
   so keeping inference in-region helps latency and data residency. **Verify the
   model is actually enabled there before committing to it**; model access is
   granted per region, and that check decides the region, not preference.
-- **Model:** `global.anthropic.claude-sonnet-4-6` (a global inference profile).
+- **Model:** `apac.amazon.nova-pro-v1:0` (Amazon Nova, the APAC cross-region
+  inference profile that serves `ap-south-1`).
 - **Credentials come from the AWS credential chain only.** Never put them in
   `.env`, in the repository, or in any file this project reads.
 
@@ -164,8 +174,9 @@ pytest -q                             # 476 tests, live ones skipped
 
 1. An AWS account with credentials configured (`aws configure`, a profile, or
    an SSO session).
-2. Claude model access **enabled in your chosen region** — Bedrock console →
-   Model access. This is the step people miss.
+2. Nova model access **enabled in your chosen region** — Bedrock console →
+   Model access. This is the step people miss. Nova is first-party AWS, so
+   this is normally a single click with no usage-terms form to wait on.
 3. `FF_AWS_REGION` exported.
 
 ### Check before spending anything
@@ -176,8 +187,8 @@ python -m app.live_check --preflight
 
 Free: it calls no model and no AWS API. It verifies credentials resolve, the
 region is explicit, the provider resolves to the one you asked for, and that no
-Anthropic key is being read. On failure it names each missing prerequisite with
-its fix and exits 2 without spending.
+vendor API key (Anthropic, OpenAI, or otherwise) is being read. On failure it
+names each missing prerequisite with its fix and exits 2 without spending.
 
 ### Telling Bedrock and Ollama apart
 
@@ -218,9 +229,12 @@ Each run uses a scratch database, so live checks never touch real records.
 pytest -m live                        # the 11 live-model tests, opt-in
 ```
 
-**Status: not yet run.** The harness is complete and tested; no live Bedrock
-call has been made from this repository, because no AWS credentials are
-configured on this machine.
+**Status: harness proven, no successful call yet.** AWS credentials resolve and
+`--preflight` passes. The default model was Anthropic Claude Sonnet 4.6 until
+its Bedrock model access came back `authorizationStatus: NOT_AUTHORIZED` /
+`agreementAvailability: NOT_AVAILABLE` (the third-party usage-terms agreement
+had not been accepted) — the switch to Amazon Nova above removes that specific
+gate. No live call has yet succeeded from this repository.
 
 ## Deployment
 
@@ -430,7 +444,7 @@ issuing a second receipt.
 ```
 app/
   agent.py           the Strands Agent: tools + system prompt
-  model_provider.py  Bedrock / Anthropic / Ollama selection
+  model_provider.py  Bedrock (Amazon Nova) / Ollama selection
   database.py        SQLite schema, connections, counters
   models.py          row -> dict converters (what the model actually reads)
   money.py           minor-unit validation, parsing and currency formatting

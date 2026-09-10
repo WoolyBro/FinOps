@@ -1,7 +1,18 @@
 """Model selection.
 
-This project runs Claude on Amazon Bedrock. It does not use the Anthropic API
-directly, and nothing here requires an ANTHROPIC_API_KEY.
+This project runs on Amazon Bedrock. It does not use the Anthropic API (or any
+other model vendor's API) directly, and nothing here requires an
+ANTHROPIC_API_KEY -- the whole point of Bedrock is that inference goes through
+your AWS account and AWS credentials, never a vendor's own endpoint.
+
+The default model is Amazon Nova, AWS's own first-party model family on
+Bedrock. It was chosen over Anthropic's Bedrock models for a concrete,
+practical reason: first-party AWS models carry no separate usage-terms
+agreement to accept, only the ordinary one-click Bedrock model-access grant.
+Anthropic's Bedrock models need that agreement accepted before
+`authorizationStatus` will ever move off NOT_AUTHORIZED, which is a second gate
+this project does not need. Override with FF_MODEL_ID for any other model this
+account has been granted -- nothing else in the codebase assumes a vendor.
 
     FF_MODEL_PROVIDER=bedrock  -> Amazon Bedrock. Production, and the default
                                   whenever AWS credentials resolve.
@@ -22,7 +33,9 @@ from urllib.parse import urlparse
 from app.aws_config import RegionNotConfigured, require_region, resolve_region
 
 # Sensible defaults per provider; override with FF_MODEL_ID.
-BEDROCK_MODEL_ID = "global.anthropic.claude-sonnet-4-6"
+# apac.amazon.nova-pro-v1:0 is the cross-region inference profile that serves
+# ap-south-1 (Mumbai) and the rest of AWS's Asia-Pacific grouping.
+BEDROCK_MODEL_ID = "apac.amazon.nova-pro-v1:0"
 OLLAMA_MODEL_ID = "llama3.1"
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
 
@@ -32,7 +45,7 @@ _NOT_CONFIGURED = (
     "No model provider is available.\n"
     "  Production path -- Amazon Bedrock:\n"
     "    configure AWS credentials (aws configure, a profile, or an SSO\n"
-    "    session) and enable Anthropic Claude under Bedrock > Model access.\n"
+    "    session) and enable Amazon Nova under Bedrock > Model access.\n"
     "  Local path -- Ollama:\n"
     "    start Ollama on {ollama_host} and pull a model.\n"
     "  To pin one explicitly, set FF_MODEL_PROVIDER=bedrock|ollama."

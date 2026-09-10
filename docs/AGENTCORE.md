@@ -83,9 +83,11 @@ tool behaviour rather than on SQLite.
 
 1. **An AWS account** with credentials configured (`aws configure`, a profile,
    or an SSO session).
-2. **Model access for Claude in your chosen region.** Bedrock enables
+2. **Model access for Amazon Nova in your chosen region.** Bedrock enables
    foundation models by default, but verify: model access is *per region*, and
-   this is the failure people hit. Bedrock console → Model access.
+   this is the failure people hit. Bedrock console → Model access. Nova is
+   first-party AWS, so this is normally a single click -- no usage-terms form
+   to submit and wait on, unlike Anthropic/Meta/Mistral's Bedrock models.
 3. **Node.js 20+** — the AgentCore CLI ships as an npm package.
 4. **Python 3.10+**.
 5. **Docker** — only for the `Container` build type. The default `CodeZip`
@@ -200,7 +202,7 @@ it. Replace `REGION`, `ACCOUNT_ID`, `AGENT_NAME` and `AGENT_ID`.
 
 **`execution-role-policy.json`** — what AgentCore assumes to run the agent:
 
-- `bedrock:InvokeModel` / `InvokeModelWithResponseStream`, scoped to the Claude
+- `bedrock:InvokeModel` / `InvokeModelWithResponseStream`, scoped to the Nova
   model and its inference profile.
 - CloudWatch Logs, scoped to `/aws/bedrock-agentcore/runtimes/*`.
 - X-Ray tracing — `"Resource": "*"` because X-Ray does not support
@@ -209,10 +211,11 @@ it. Replace `REGION`, `ACCOUNT_ID`, `AGENT_NAME` and `AGENT_ID`.
 - ECR read — **delete these two statements if you deploy with CodeZip.**
 
 > **Inference profiles need two grants.** The default model
-> `global.anthropic.claude-sonnet-4-6` is a global inference profile, so the
-> policy allows both the profile ARN *and* the underlying
-> `foundation-model/*` ARNs it routes to. Granting only the profile produces an
-> `AccessDenied` that names a region you never configured.
+> `apac.amazon.nova-pro-v1:0` is a cross-region inference profile, so the
+> policy allows both the profile ARN *and* the underlying `foundation-model`
+> ARN it routes to. Granting only the profile produces an `AccessDenied` that
+> names a region you never configured. The same two-grant shape applies to any
+> Bedrock model you switch to via `FF_MODEL_ID`, first-party or third-party.
 
 **`execution-role-trust-policy.json`** — lets `bedrock-agentcore.amazonaws.com`
 assume the role, with `aws:SourceAccount` and `aws:SourceArn` conditions to
