@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Strands Agents](https://img.shields.io/badge/Strands%20Agents-1.54-orange)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Tests](https://img.shields.io/badge/tests-588%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-590%20passing-brightgreen)
 
 You tell it what happened, in your own words:
 
@@ -164,7 +164,7 @@ flowchart LR
 | Layer | Technology |
 |---|---|
 | Agent framework | [Strands Agents SDK](https://strandsagents.com) 1.54 |
-| Models | Google Gemini (`gemini-3.6-flash`) · Amazon Bedrock (Amazon Nova) · Ollama |
+| Models | Google Gemini (`gemini-3.5-flash-lite`) · Amazon Bedrock (Amazon Nova) · Ollama |
 | Backend | Python 3.10+, FastAPI, Uvicorn |
 | Storage | SQLite, money as integer minor units |
 | Documents | ReportLab |
@@ -256,7 +256,7 @@ All settings are environment variables, usually set in `.env`.
 | Variable | Default | Purpose |
 |---|---|---|
 | `FF_MODEL_PROVIDER` | `auto` | `gemini`, `bedrock`, `ollama` or `auto` |
-| `FF_MODEL_ID` | per provider | Override the model, e.g. `gemini-3.6-flash` |
+| `FF_MODEL_ID` | per provider | Override the model, e.g. `gemini-3.5-flash-lite` |
 | `GEMINI_API_KEY` | none | Google Gemini API key |
 | `FF_AWS_REGION` | none | Bedrock region. Deliberately has no default |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama endpoint |
@@ -276,7 +276,7 @@ The agent is a Strands agent whatever the model. Nothing outside
 
 | Provider | Model | Needs |
 |---|---|---|
-| **Google Gemini** | `gemini-3.6-flash` via Strands' `GeminiModel` | `GEMINI_API_KEY` (free tier available) |
+| **Google Gemini** | `gemini-3.5-flash-lite` via Strands' `GeminiModel` | `GEMINI_API_KEY` (free tier available) |
 | **Amazon Bedrock** | Amazon Nova, `apac.amazon.nova-pro-v1:0` | AWS credentials, `FF_AWS_REGION`, Nova enabled under Bedrock → Model access |
 | **Ollama** | `llama3.1` | Ollama running locally |
 
@@ -378,13 +378,13 @@ deploy/
   iam/                  least-privilege IAM policies
 docs/
   AGENTCORE.md          deployment guide and storage limitations
-tests/                  588 offline tests + opt-in live-model tests
+tests/                  590 offline tests + opt-in live-model tests
 ```
 
 ## Testing
 
 ```bash
-pytest -q          # 588 tests. No credentials, no network, no spend.
+pytest -q          # 590 tests. No credentials, no network, no spend.
 ```
 
 The suite covers money parsing and formatting, invoice numbering, payment and
@@ -497,7 +497,7 @@ SQLite or Postgres).
 
 **Working today**
 
-- The full deterministic business layer: 22 tools, 588 passing tests
+- The full deterministic business layer: 22 tools, 590 passing tests
 - The dashboard, all ten screens wired to the live API with no mock data
 - The agent running live on Google Gemini through Strands, verified end to end: a read question produced the correct tool chain (`find_client → get_client_balance`) and the correct balance
 - Invoice and receipt PDFs
@@ -506,7 +506,8 @@ SQLite or Postgres).
 
 **Known limitations**
 
-- **Agent replies take seconds, not milliseconds.** A two-tool turn measured about 10 seconds on `gemini-3.6-flash` with low thinking, and longer turns take proportionally longer.
+- **Agent replies take seconds, not milliseconds.** Measured on `gemini-3.5-flash-lite` with low thinking: recording a payment (six tool calls, five model calls) took about 14 seconds; refusing an overpayment took about 7.
+- **The Gemini free tier is rate-limited per minute.** `gemini-3.6-flash` allowed only 5 requests a minute, which a single payment turn nearly exhausts; that is why the default is the lite model. Check your own limits at https://ai.dev/rate-limit.
 - **The Bedrock path is implemented but not yet live-validated.** Bedrock model access hadn't been granted on the development account.
 - **SQLite is single-node.** Fine for one freelancer, not for multi-tenant or AgentCore production (see [docs/AGENTCORE.md](docs/AGENTCORE.md)).
 - **Reminders aren't sent.** There's no email or messaging integration; approved reminders are copied and sent by hand.

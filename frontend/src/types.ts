@@ -44,6 +44,9 @@ export type Payment = {
   receipt_number: string | null;
   receipt_available: boolean;
   outstanding_after_display: string;
+  /** The invoice total and paid-to-date as they stood after this payment. */
+  invoice_amount_display: string;
+  paid_to_date_display: string;
   invoice_status: InvoiceStatus;
 };
 

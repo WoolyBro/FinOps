@@ -369,7 +369,7 @@ export const AgentPage: React.FC<AgentPageProps> = ({
                       </div>
                     ) : (
                       <div className="text-[14px] leading-relaxed whitespace-pre-line pl-1" style={{ color: 'var(--ink-strong)' }}>
-                        {turn.reply}
+                        <ReplyText text={turn.reply} />
                       </div>
                     )}
 
@@ -500,6 +500,36 @@ export const AgentPage: React.FC<AgentPageProps> = ({
 };
 
 /** The record the turn created, as the tool returned it. */
+/**
+ * Models write light Markdown. Render **bold** and `code` as elements, leave
+ * everything else as plain text. React escapes every string, so nothing the
+ * model writes can become markup beyond these two.
+ */
+const ReplyText: React.FC<{ text: string }> = ({ text }) => {
+  const parts = text.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+          return (
+            <strong key={i} className="font-[600]" style={{ color: 'var(--ink)' }}>
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+        if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+          return (
+            <code key={i} className="font-mono text-[12.5px]">
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        return <React.Fragment key={i}>{part}</React.Fragment>;
+      })}
+    </>
+  );
+};
+
 const ResultCard: React.FC<{
   card: ChatResultCard;
   onViewInvoicePdf: (invoice: Invoice) => void;
@@ -538,7 +568,9 @@ const ResultCard: React.FC<{
           <div className="text-[12.5px] space-y-1" style={{ color: 'var(--ink-body)' }}>
             {row('Client', card.payment.client_name)}
             {row('Invoice', `${card.invoice.invoice_number} · ${card.invoice.project}`)}
-            {row('Left on invoice', card.invoice.outstanding_display, true)}
+            {row('Invoice total', card.payment.invoice_amount_display, true)}
+            {row('Paid to date', card.payment.paid_to_date_display, true)}
+            {row('Left on invoice', card.payment.outstanding_after_display, true)}
             {row('Receipt', card.payment.receipt_number ?? 'Issued when first opened', !!card.payment.receipt_number)}
           </div>
           <div className="pt-2 border-t flex justify-end gap-2" style={{ borderColor: 'var(--line)' }}>

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FreelanceFlow — Pitch</title>
+<style>
+  :root {
+    --canvas: #f6f9fc;
+    --surface: #ffffff;
+    --ink: #0a2540;
+    --ink-body: #3c4257;
+    --ink-muted: #697386;
+    --line: #e3e8ee;
+    --accent: #635bff;
+    --accent-wash: #f0efff;
+    --ok-bg: #cbf4c9; --ok-ink: #0e6245;
+    --bad-bg: #fde2dd; --bad-ink: #a41c4e;
+    --shadow: 0 15px 35px rgba(50, 50, 93, 0.1), 0 5px 15px rgba(10, 37, 64, 0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--canvas); }
+  body {
+    font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    cursor: default;
+  }
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 6vh 9vw;
+    opacity: 0; pointer-events: none;
+    transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .slide.active { opacity: 1; pointer-events: auto; }
+  .eyebrow {
+    font-size: clamp(12px, 1.25vw, 18px); font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 2.2vh;
+  }
+  h1 { font-size: clamp(40px, 6.2vw, 96px); line-height: 1.02; letter-spacing: -0.035em; margin: 0; font-weight: 700; }
+  h2 { font-size: clamp(30px, 4vw, 62px); line-height: 1.08; letter-spacing: -0.028em; margin: 0 0 4vh; font-weight: 680; max-width: 22ch; }
+  .lede { font-size: clamp(18px, 2vw, 30px); line-height: 1.45; color: var(--ink-body); max-width: 40ch; margin: 3vh 0 0; }
+  .brand { display: flex; align-items: center; gap: 1.4vw; margin-bottom: 5vh; }
+  .mark {
+    width: clamp(44px, 4.4vw, 68px); height: clamp(44px, 4.4vw, 68px); border-radius: 22%;
+    background: linear-gradient(160deg, #635bff, #4b45c6); color: #fff;
+    display: grid; place-items: center; font-weight: 700; font-size: clamp(22px, 2.3vw, 36px);
+  }
+  .brand span { font-size: clamp(20px, 2vw, 32px); font-weight: 650; letter-spacing: -0.01em; }
+  .quote {
+    display: inline-block; margin-top: 5vh; padding: 1.6vh 1.6vw;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow);
+    font-size: clamp(18px, 2vw, 30px); color: var(--ink);
+  }
+  .quote b { color: var(--accent); font-weight: 650; }
+  .grid { display: grid; gap: 2vw; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 3vh 1.8vw; box-shadow: var(--shadow);
+  }
+  .card h3 { margin: 0 0 1.2vh; font-size: clamp(17px, 1.7vw, 26px); letter-spacing: -0.015em; font-weight: 650; }
+  .card p { margin: 0; font-size: clamp(14px, 1.3vw, 20px); line-height: 1.5; color: var(--ink-body); }
+  .pill { display: inline-block; padding: 0.4vh 0.7vw; border-radius: 6px; font-size: clamp(12px, 1.05vw, 16px); font-weight: 600; margin-bottom: 1.6vh; }
+  .pill.bad { background: var(--bad-bg); color: var(--bad-ink); }
+  .pill.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .contrast { display: grid; grid-template-columns: 1fr 1fr; gap: 2.4vw; }
+  .contrast .card { padding: 4vh 2.2vw; }
+  .rule {
+    margin-top: 4.5vh; font-size: clamp(22px, 2.6vw, 40px); font-weight: 650; letter-spacing: -0.02em;
+  }
+  .rule em { font-style: normal; color: var(--accent); }
+  /* architecture */
+  .arch { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.1vw; align-items: stretch; }
+  .node {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 2.2vh 1vw; text-align: center; box-shadow: 0 1px 3px rgba(50,50,93,0.08);
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .node b { display: block; font-size: clamp(14px, 1.35vw, 21px); letter-spacing: -0.01em; }
+  .node small { display: block; margin-top: 0.8vh; color: var(--ink-muted); font-size: clamp(11px, 1vw, 16px); line-height: 1.4; }
+  .node.agent { background: var(--accent-wash); border-color: #cfcaff; }
+  .node.agent b { color: #3f37d6; }
+  .arrow { text-align: center; color: var(--ink-muted); font-size: clamp(12px, 1.1vw, 17px); margin: 1.6vh 0; }
+  .flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1.1vw; }
+  .flow div { text-align: center; color: var(--ink-muted); font-size: clamp(16px, 1.6vw, 24px); }
+  .under { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.1vw; margin-top: 2.4vh; }
+  .tools { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: clamp(11px, 0.95vw, 15px); color: var(--ink-body); line-height: 1.6; margin-top: 1vh; }
+  ul.checks { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2.2vh 3vw; }
+  ul.checks li { font-size: clamp(17px, 1.8vw, 28px); line-height: 1.35; color: var(--ink-body); padding-left: 2.2vw; position: relative; }
+  ul.checks li::before {
+    content: ""; position: absolute; left: 0; top: 0.35em; width: 0.9vw; height: 0.9vw; min-width: 10px; min-height: 10px;
+    border-radius: 3px; background: var(--accent);
+  }
+  ul.checks li b { color: var(--ink); font-weight: 650; }
+  .foot {
+    position: fixed; left: 9vw; right: 9vw; bottom: 3.2vh; display: flex; justify-content: space-between;
+    font-size: clamp(11px, 0.95vw, 15px); color: var(--ink-muted);
+  }
+  .progress { position: fixed; left: 0; top: 0; height: 3px; background: var(--accent); transition: width 220ms ease; }
+  @media (prefers-reduced-motion: reduce) { .slide, .progress { transition: none; } }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<!-- 1. Title -->
+<section class="slide active">
+  <div class="brand"><div class="mark">F</div><span>FreelanceFlow</span></div>
+  <h1>Tell it what happened.<br />It keeps your books straight.</h1>
+  <p class="lede">An AI billing-operations agent for freelancers, built on the Strands Agents SDK.</p>
+  <div class="quote">“<b>Rahul paid me ₹15,000 today.</b>”</div>
+</section>
+
+<!-- 2. Problem -->
+<section class="slide">
+  <div class="eyebrow">The problem</div>
+  <h2>Every freelancer is also their own accounts department.</h2>
+  <div class="grid">
+    <div class="card"><span class="pill bad">Scattered</span><h3>Three apps, one ledger</h3><p>Invoices in a spreadsheet, payments in a banking app, reminders in WhatsApp.</p></div>
+    <div class="card"><span class="pill bad">Constant</span><h3>Small work that never stops</h3><p>Raise invoices, match each transfer to the right invoice, chase what’s late.</p></div>
+    <div class="card"><span class="pill bad">Costly</span><h3>Mistakes that erode trust</h3><p>A payment on the wrong invoice. A reminder for money already received.</p></div>
+  </div>
+</section>
+
+<!-- 3. Who it's for -->
+<section class="slide">
+  <div class="eyebrow">Who it’s for</div>
+  <h2>Independent freelancers and small studios, without a bookkeeper.</h2>
+  <div class="grid">
+    <div class="card"><h3>Designers, developers, writers, consultants</h3><p>People billing a handful of clients a month and doing the admin themselves.</p></div>
+    <div class="card"><h3>Built for India first</h3><p>Rupees and lakhs, Indian digit grouping (₹1,50,000.00), UPI and NEFT payments.</p></div>
+    <div class="card"><h3>In their own words</h3><p>“40k”, “1.5 lakh”, “Rahul paid me today”: no forms required, though every form still works.</p></div>
+  </div>
+</section>
+
+<!-- 4. Why it matters -->
+<section class="slide">
+  <div class="eyebrow">Why it matters</div>
+  <h2>AI can talk about your money. It shouldn’t be trusted to invent it.</h2>
+  <div class="contrast">
+    <div class="card"><span class="pill bad">A chat assistant</span><h3>Confidently gives a balance it never looked up</h3><p>Fluent, plausible and unverifiable. Wrong numbers look exactly like right ones.</p></div>
+    <div class="card"><span class="pill ok">FreelanceFlow</span><h3>Every number comes from a tool reading the ledger</h3><p>The agent shows each step it ran, and refuses rather than guesses.</p></div>
+  </div>
+  <div class="rule">The AI decides <em>what</em> to do. Deterministic code does everything that touches money.</div>
+</section>
+
+<!-- 5. How it's built -->
+<section class="slide">
+  <div class="eyebrow">How it’s built</div>
+  <h2 style="margin-bottom:3vh">One agent, twenty-two deterministic tools, one ledger.</h2>
+  <div class="arch">
+    <div class="node"><b>Freelancer</b><small>types what happened</small></div>
+    <div class="node"><b>React dashboard</b><small>10 screens · live tool trace · result cards</small></div>
+    <div class="node"><b>FastAPI</b><small>one API for the agent and the forms</small></div>
+    <div class="node agent"><b>Strands Agent</b><small>system prompt of hard rules · ToolTracer hooks</small></div>
+    <div class="node"><b>Gemini</b><small>also runs on Amazon Bedrock or a local model</small></div>
+  </div>
+  <div class="flow"><div>→</div><div>→</div><div>→</div><div>⇅</div><div></div></div>
+  <div class="under">
+    <div class="node agent"><b>22 deterministic tools</b>
+      <div class="tools">parse_amount · find_client · create_invoice<br />record_payment · generate_receipt<br />get_overdue_invoices · reminders …</div></div>
+    <div class="node"><b>SQLite ledger</b><small>money as integer paise · balances derived from payments, never stored</small></div>
+    <div class="node"><b>Invoice &amp; receipt PDFs</b><small>rendered from the ledger, not written by the model</small></div>
+  </div>
+</section>
+
+<!-- 6. Trust -->
+<section class="slide">
+  <div class="eyebrow">Built to be trusted</div>
+  <h2>The guarantees are in the code, not the prompt.</h2>
+  <ul class="checks">
+    <li><b>593 automated tests</b>, with no credentials needed</li>
+    <li><b>Overpayments refused</b> with the real outstanding balance</li>
+    <li><b>Duplicates flagged</b>, and the agent must ask before a second one</li>
+    <li><b>Result cards</b> built from tool output, not model text</li>
+    <li><b>Gapless invoice numbers</b> assigned by the database</li>
+    <li><b>Keys and server paths</b> never reach the browser</li>
+  </ul>
+</section>
+
+<!-- 7. Close -->
+<section class="slide">
+  <div class="brand"><div class="mark">F</div><span>FreelanceFlow</span></div>
+  <h1>Keeps your books straight,<br />without inventing a number.</h1>
+  <p class="lede">Open source under the MIT license · github.com/WoolyBro/FinOps</p>
+</section>
+
+<div class="foot"><span>FreelanceFlow · Strands Agents SDK</span><span id="count"></span></div>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  const progress = document.getElementById('progress');
+  const count = document.getElementById('count');
+  let index = 0;
+  function show(next) {
+    index = Math.max(0, Math.min(slides.length - 1, next));
+    slides.forEach((s, i) => s.classList.toggle('active', i === index));
+    progress.style.width = ((index + 1) / slides.length * 100) + '%';
+    count.textContent = (index + 1) + ' / ' + slides.length;
+    history.replaceState(null, '', '#' + (index + 1));
+  }
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowRight', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); show(index + 1); }
+    if (['ArrowLeft', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); show(index - 1); }
+    if (e.key === 'Home') show(0);
+    if (e.key === 'End') show(slides.length - 1);
+  });
+  document.addEventListener('click', (e) => show(e.clientX > innerWidth / 3 ? index + 1 : index - 1));
+  show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+</script>
+</body>
+</html>
