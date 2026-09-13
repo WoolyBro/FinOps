@@ -1,483 +1,529 @@
 # FreelanceFlow
 
-An AI billing operations agent for freelancers, built on the
-[Strands Agents SDK](https://strandsagents.com).
+**An AI billing operations agent for freelancers, built on the [Strands Agents SDK](https://strandsagents.com).**
 
-You tell it what happened in plain language:
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Strands Agents](https://img.shields.io/badge/Strands%20Agents-1.54-orange)
+![React](https://img.shields.io/badge/React-19-61dafb)
+![Tests](https://img.shields.io/badge/tests-588%20passing-brightgreen)
 
-> "I completed a ₹40,000 website for Rahul. He paid ₹15,000 today and the
-> remaining ₹25,000 is due September 15."
+You tell it what happened, in your own words:
 
-It turns that into real records and real documents — clients, invoices,
-payments, receipts, reminders — using deterministic Python tools. The model
-decides *what* to do; Python does it.
+> **"Rahul paid me ₹15,000 today."**
 
-## Status
+FreelanceFlow finds Rahul, works out which invoice the money belongs to, parses
+the amount, records the payment, recalculates the balance and issues a receipt,
+and shows you every step it took. Each of those steps is a deterministic Python
+tool writing to a real ledger. The model decides *what* to do. It never invents
+a client, an invoice number or a rupee.
 
-**Phases 1-7 complete.** The deterministic business layer was built and tested
-first; the live model and its AgentCore deployment came only once the tools
-were trustworthy. What is still unproven is the live Bedrock round-trip, which
-needs AWS credentials.
+---
 
-| Phase | Scope | State |
-|---|---|---|
-| 1 | Strands agent, model provider, SQLite schema, client tools | done |
-| 2 | Invoice numbering, creation, retrieval, validation, amount parsing | done |
-| 2.8 | Deterministic invoice PDFs | done |
-| 3 | Payments, balances, status transitions, receipts | done |
-| 4 | Overdue detection, reminders, financial summaries | done |
-| 5 | Live Strands + Bedrock | harness ready, awaiting credentials |
-| 6 | FastAPI + Next.js UI, agent activity panel | done |
-| 7 | AgentCore Runtime deployment | done (deploy blocked on AWS credentials) |
-| 8 | Live Bedrock validation | harness ready, **awaiting AWS credentials** |
-| 9 | Production hardening (storage durability, cost control) | |
+## Table of contents
 
-476 tests pass with no credentials of any kind. 21 tools are registered with
-the agent. The agent loop itself is proven offline against a scripted model
-(`tests/test_agent_loop.py`); what remains unproven is whether a *real* model
-chooses the right tools, which is what `pytest -m live` measures.
+- [The problem](#the-problem)
+- [What makes it an agent, not a chatbot](#what-makes-it-an-agent-not-a-chatbot)
+- [Features](#features)
+- [Try it: a two-minute walkthrough](#try-it-a-two-minute-walkthrough)
+- [Architecture](#architecture)
+- [Tech stack](#tech-stack)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+- [Model providers](#model-providers)
+- [The agent's 22 tools](#the-agents-22-tools)
+- [API reference](#api-reference)
+- [Project structure](#project-structure)
+- [Testing](#testing)
+- [Design decisions](#design-decisions)
+- [Security](#security)
+- [Deployment](#deployment)
+- [Status, limitations and roadmap](#status-limitations-and-roadmap)
+- [License](#license)
 
-## Setup
+---
+
+## The problem
+
+Independent freelancers do their own accounts receivable: they raise invoices,
+chase late payments, match incoming transfers to the right invoice and keep
+receipts, usually across a spreadsheet, a notes app and a banking app. The work
+is small but constant, and the mistakes are costly: a payment recorded against
+the wrong invoice, a reminder sent for money already received, a balance that
+no longer matches the paperwork.
+
+Chat assistants can talk about this work but can't be trusted to do it, because
+a language model will happily produce a plausible balance it never looked up.
+FreelanceFlow is built around that failure mode.
+
+## What makes it an agent, not a chatbot
+
+**The model orchestrates. Python does the money.** Every action the agent takes
+is a call to one of 22 typed tools. The tools read and write SQLite, do all the
+arithmetic in integer minor units (paise), assign invoice numbers inside a
+database transaction and render PDFs from the ledger. The model chooses which
+tools to call and in what order; it never computes a figure itself.
+
+**Every step is visible.** Each chat response carries the tool calls the agent
+actually made: tool name, arguments, the tool's own status and timing. The
+dashboard renders that trace under each reply, so you can see that
+`find_client → list_invoices → parse_amount → record_payment` really ran.
+
+**Results come from tool output, not prose.** When a turn records a payment or
+creates an invoice, the result card under the reply is built from the tool's
+return value. The amount, invoice number and remaining balance on the card are
+the ledger's figures, even if the model's sentence paraphrases them.
+
+**It refuses rather than guesses.** Tools return explicit statuses: `found`,
+`not_found`, `ambiguous`, `duplicate_suspected`, `error`. Two clients named
+Rahul means the agent asks which one. A payment larger than the balance is
+refused with the real outstanding figure. "Mark it paid" with no amount means
+the agent asks how much. The system prompt forbids reporting any action as done
+unless a tool returned success.
+
+**The dashboard works without the model.** Every screen reads and writes
+through the same tools the agent uses, so the app is fully operable by hand. The
+agent adds speed; it isn't a single point of failure.
+
+## Features
+
+### The agent
+
+| You say | The agent does |
+|---|---|
+| "Rahul paid me ₹15,000 today" | Finds the client and the open invoice, records the payment, recalculates the status, offers a receipt |
+| "Who owes me money?" | Lists outstanding and overdue invoices with per-currency totals |
+| "Create an invoice for Meera for 85k for the brand redesign" | Parses "85k" into ₹85,000.00, allocates the next invoice number, creates the invoice |
+| "Draft a reminder for Priya" | Writes a reminder built from the invoice's own figures, left as a draft for your approval |
+| "How much did I receive this month?" | Returns received, outstanding and overdue for the period |
+
+Amounts can be written the way people say them: `40k`, `1.5 lakh`, `Rs 40,000/-`, `₹15,000`.
+
+### The dashboard
+
+Ten screens, grouped by the work:
+
+- **Overview**: outstanding and overdue totals, this month's collection rate, the invoices that need attention, and recent ledger activity
+- **Agent**: conversation with the live tool trace and result cards
+- **Invoices** and **invoice detail**: status, amount, paid, outstanding, due date, payment history and PDF download
+- **Clients** and **client detail**: per-client balances, invoice and payment history, inline editing
+- **Payments**: the ledger, filterable by date range and client, with the total for exactly that filter, plus receipt PDFs
+- **Overdue**: collections view, most overdue first, with one-click reminder drafting and payment recording
+- **Reminders**: draft → approve → copy, or cancel; nothing is ever sent automatically
+- **Reports**: invoiced against received by month, breakdown by client, status distribution, with Indian financial-year presets
+
+### Documents
+
+- Invoice PDFs and receipt PDFs rendered deterministically from the ledger
+- Indian digit grouping (₹1,50,000.00) with an embedded font that carries the ₹ sign
+- A receipt records the balance as it stood when that payment arrived, and a payment keeps one receipt number for life
+
+## Try it: a two-minute walkthrough
+
+With the app running on the demo ledger (see [Getting started](#getting-started)):
+
+1. **Overview**: note that Rahul Sharma's invoice **FF-0005** for **₹40,000** is unpaid. The demo seed leaves it that way on purpose.
+2. **Agent**: type **"How much does Rahul owe me?"**. Watch the trace: `find_client → get_client_balance`.
+3. Type **"Rahul paid me ₹15,000 today"**. The trace shows the payment being recorded, and the result card shows **₹25,000.00** remaining.
+4. **Invoices → FF-0005**: the payment is in the history, the status is *Partially paid*, and the receipt PDF is one click away.
+5. Type **"Record ₹99,000 against FF-0005"**. The agent refuses and quotes the real outstanding balance.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    U[Browser] --> FE["React + Vite dashboard"]
+    FE -->|"/api (proxy)"| API[FastAPI]
+    API --> DS["data / views / write services"]
+    API --> AS[AgentService]
+    AS --> SA["Strands Agent"]
+    SA <-->|reasoning| M["Model provider<br/>Gemini · Bedrock · Ollama"]
+    SA --> T["22 deterministic tools"]
+    DS --> T
+    T --> DB[(SQLite ledger)]
+    T --> PDF["Invoice and receipt PDFs"]
+    AS -. hooks .-> TR["ToolTracer<br/>trace + result cards"]
+```
+
+- **The browser never talks to Strands.** The frontend calls FastAPI, which calls
+  `AgentService`, the only component that constructs an agent or invokes a
+  model. Route handlers don't import Strands.
+- **The dashboard and the agent share one set of tools.** A client created by
+  hand and a client created by the agent go through the same validation, so
+  there's no second, weaker path into the database.
+- **Every figure on screen is computed on the server** in
+  `app/services/views.py`, from the same helpers the reporting tools use. The
+  frontend renders the `*_display` strings it's sent and does no money
+  arithmetic.
+- **Tracing is a Strands hook.** `ToolTracer` registers `BeforeToolCallEvent`
+  and `AfterToolCallEvent` callbacks and records each call's name, arguments,
+  result and duration.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Agent framework | [Strands Agents SDK](https://strandsagents.com) 1.54 |
+| Models | Google Gemini (`gemini-3.6-flash`) · Amazon Bedrock (Amazon Nova) · Ollama |
+| Backend | Python 3.10+, FastAPI, Uvicorn |
+| Storage | SQLite, money as integer minor units |
+| Documents | ReportLab |
+| Frontend | React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4 |
+| Deployment target | Amazon Bedrock AgentCore Runtime (ARM64 container) |
+| Tests | pytest, a scripted Strands model for offline agent-loop tests |
+
+## Getting started
+
+### Prerequisites
+
+- **Python 3.10+** (developed on 3.13)
+- **Node.js 20+** (for the dashboard)
+- **A model provider.** The quickest option is a free Google Gemini API key from
+  [aistudio.google.com/apikey](https://aistudio.google.com/apikey). See
+  [Model providers](#model-providers) for Bedrock and Ollama.
+
+### 1. Install the backend
 
 ```bash
+git clone <your-repo-url> freelanceflow
+cd freelanceflow
+
 python -m venv .venv
-.venv\Scripts\activate          # Windows
+# Windows:      .venv\Scripts\activate
+# macOS/Linux:  source .venv/bin/activate
+
 pip install -r requirements.txt
 cp .env.example .env
 ```
 
-### Choosing a model provider
+### 2. Add your model key
 
-FreelanceFlow runs on **Amazon Bedrock**. It does not use the Anthropic API (or
-any other vendor's API) directly, and nothing in the app requires an
-`ANTHROPIC_API_KEY` — a key being present in the environment changes nothing,
-and there is a test asserting that.
+Open `.env` and set:
 
-The default model is **Amazon Nova** (`apac.amazon.nova-pro-v1:0`), AWS's own
-first-party model on Bedrock, chosen deliberately over Anthropic's Bedrock
-models: first-party AWS models need only the ordinary one-click model-access
-grant, while third-party models (Anthropic, Meta, Mistral) additionally require
-accepting a usage-terms agreement before Bedrock will authorize them — one
-fewer gate to clear. Override with `FF_MODEL_ID` for any other model this
-account has been granted.
+```ini
+FF_MODEL_PROVIDER=gemini
+GEMINI_API_KEY=your-key-here
+```
 
-| `FF_MODEL_PROVIDER` | Uses | Needs |
-|---|---|---|
-| `auto` (default) | Bedrock if AWS credentials resolve, else Ollama if it is running | one of the two below |
-| `bedrock` | Amazon Nova on Amazon Bedrock — **production** | `aws configure` + Nova enabled under Bedrock → Model access |
-| `ollama` | A local model — **development without AWS** | Ollama running on `localhost:11434` |
+`.env` is gitignored. Never commit a key.
 
-`auto` probes for Ollama with a half-second socket check. Asking for a provider
-explicitly skips that probe, so a slow Ollama start-up is never mistaken for a
-missing install.
-
-Nothing outside `model_provider.py` knows which one is in use, which is what
-keeps the eventual AgentCore deployment a configuration change rather than a
-rewrite.
-
-### Setting up Bedrock
-
-Four steps, all on your side — none of them can be scripted from here, because
-they need your AWS account.
-
-1. **Create an IAM user** with programmatic access. For least privilege, use
-   `deploy/iam/execution-role-policy.json` rather than a `FullAccess` policy.
-2. **Enable model access** in the Bedrock console → *Model access* → **Amazon
-   Nova**. Model access is granted *per region*; credentials alone are not
-   enough, and this is the step people miss.
-3. **Configure credentials** (`aws configure`, a profile, or an SSO session).
-   `model_provider.py` resolves whatever botocore can find.
-4. **Set the region explicitly.**
-
-   ```bash
-   export FF_AWS_REGION=ap-south-1
-   ```
-
-   There is no fallback default. A model enabled in one region is not enabled
-   in another, so guessing turns a missing grant into an opaque `AccessDenied`
-   at the first inference call instead of a clear error at start-up.
-
-Verify it resolved:
+### 3. Seed a demo ledger
 
 ```bash
-python -c "from app.model_provider import provider_status; print(provider_status())"
+python -m app.seed --data-dir data/demo
 ```
 
-That should report `available: True` with `provider: bedrock` and your region.
-If not, the message names what is missing.
+This creates 6 clients, 10 invoices and a realistic payment history, dated
+relative to today so the demo never goes stale. It writes to its own database
+and refuses to write into one that already has clients.
 
-For deploying the agent to AgentCore Runtime — the runtime contract, the
-minimum IAM policies, region availability, and the storage limitation you must
-read before pointing it at real data — see **[docs/AGENTCORE.md](docs/AGENTCORE.md)**.
-
-## Running
-
-### The application
-
-Two processes. The browser never talks to Strands.
-
-```
-Browser -> Next.js -> FastAPI -> AgentService -> Strands -> tools -> SQLite
-```
+### 4. Run the API
 
 ```bash
-uvicorn app.api.main:app --reload --port 8000   # API on :8000, docs at /docs
-cd frontend && npm install && npm run dev       # dashboard on :3000
+# macOS/Linux
+FF_DATA_DIR=data/demo uvicorn app.api.main:app --reload --port 8000
+
+# Windows PowerShell
+$env:FF_DATA_DIR="data/demo"; uvicorn app.api.main:app --reload --port 8000
 ```
 
-The dashboard reads records whether or not a model is configured. When no
-provider is reachable the agent panel shows the configuration state and
-disables the composer, rather than answering with something no model produced.
+Interactive API docs: http://localhost:8000/docs
 
-### The CLI
+### 5. Run the dashboard
 
 ```bash
-python -m app.cli --init-db           # create the database
-python -m app.cli                     # interactive session
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173**. Vite forwards `/api` to the API, so the browser
+only ever talks to its own origin.
+
+### Command line
+
+The agent also runs in a terminal:
+
+```bash
+python -m app.cli                                  # interactive session
 python -m app.cli "Add a client called Rahul Sharma"
 ```
 
-## Tests
+## Configuration
 
-The deterministic suite needs no credentials and spends nothing:
+All settings are environment variables, usually set in `.env`.
 
-```bash
-pytest -q                             # 476 tests, live ones skipped
-```
-
-## Live validation against Bedrock
-
-> **These calls cost AWS credits.** One run is one conversation, which the
-> agent may take several model calls to finish. Preflight is free. Keep live
-> runs deliberate and few.
-
-### Environment
-
-| Variable | Required for | Value |
+| Variable | Default | Purpose |
 |---|---|---|
-| `FF_AWS_REGION` | Bedrock | The region. No default — see below. |
-| `FF_MODEL_PROVIDER` | optional | `bedrock`, `ollama`, or `auto` (default) |
-| `FF_MODEL_ID` | optional | Overrides the model. Default below. |
-| `AWS_PROFILE` / `AWS_ACCESS_KEY_ID` … | Bedrock | Standard AWS credential chain |
-| `OLLAMA_HOST` | Ollama | Defaults to `http://localhost:11434` |
+| `FF_MODEL_PROVIDER` | `auto` | `gemini`, `bedrock`, `ollama` or `auto` |
+| `FF_MODEL_ID` | per provider | Override the model, e.g. `gemini-3.6-flash` |
+| `GEMINI_API_KEY` | none | Google Gemini API key |
+| `FF_AWS_REGION` | none | Bedrock region. Deliberately has no default |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama endpoint |
+| `FF_DATA_DIR` | `data` | Where the database and PDFs live |
+| `FF_CURRENCY` | `INR` | Default currency for new invoices |
+| `FF_BUSINESS_NAME`, `FF_BUSINESS_EMAIL`, `FF_BUSINESS_PHONE`, `FF_BUSINESS_ADDRESS` | placeholders | Printed on invoices and receipts |
+| `FF_INVOICE_PREFIX` / `FF_RECEIPT_PREFIX` | `FF` / `RC` | Document number prefixes |
+| `FF_CORS_ORIGINS` | localhost dev origins | Comma-separated allowed origins. `*` is refused |
+| `FF_GEMINI_THINKING` | `low` | Gemini thinking level: `minimal`, `low`, `medium`, `high`, or `off` |
+| `FF_SEED_DEMO` | off | `true` seeds the demo ledger at startup when the database is empty |
+| `FF_STATIC_DIR` | `frontend/dist` | Built dashboard the API serves, if present |
 
-- **Region:** `ap-south-1` (Mumbai) is suggested — the product bills in rupees,
-  so keeping inference in-region helps latency and data residency. **Verify the
-  model is actually enabled there before committing to it**; model access is
-  granted per region, and that check decides the region, not preference.
-- **Model:** `apac.amazon.nova-pro-v1:0` (Amazon Nova, the APAC cross-region
-  inference profile that serves `ap-south-1`).
-- **Credentials come from the AWS credential chain only.** Never put them in
-  `.env`, in the repository, or in any file this project reads.
+## Model providers
 
-### Prerequisites
+The agent is a Strands agent whatever the model. Nothing outside
+`app/model_provider.py` knows which provider is in use.
 
-1. An AWS account with credentials configured (`aws configure`, a profile, or
-   an SSO session).
-2. Nova model access **enabled in your chosen region** — Bedrock console →
-   Model access. This is the step people miss. Nova is first-party AWS, so
-   this is normally a single click with no usage-terms form to wait on.
-3. `FF_AWS_REGION` exported.
+| Provider | Model | Needs |
+|---|---|---|
+| **Google Gemini** | `gemini-3.6-flash` via Strands' `GeminiModel` | `GEMINI_API_KEY` (free tier available) |
+| **Amazon Bedrock** | Amazon Nova, `apac.amazon.nova-pro-v1:0` | AWS credentials, `FF_AWS_REGION`, Nova enabled under Bedrock → Model access |
+| **Ollama** | `llama3.1` | Ollama running locally |
 
-### Check before spending anything
+With `FF_MODEL_PROVIDER=auto`, FreelanceFlow uses Gemini if a key is set, then
+Bedrock if AWS credentials resolve, then Ollama if it's running. The Anthropic
+and OpenAI APIs are not supported providers, and a test asserts that nothing
+reads an `ANTHROPIC_API_KEY`.
 
-```bash
-python -m app.live_check --preflight
-```
+> **Free-tier privacy note:** on Gemini's free tier, Google may use prompts to
+> improve its models. Use the demo ledger rather than real client records.
 
-Free: it calls no model and no AWS API. It verifies credentials resolve, the
-region is explicit, the provider resolves to the one you asked for, and that no
-vendor API key (Anthropic, OpenAI, or otherwise) is being read. On failure it
-names each missing prerequisite with its fix and exits 2 without spending.
-
-### Telling Bedrock and Ollama apart
-
-Every run prints the provider, model and region it used, and `--provider` is
-**enforced**:
+**Free preflight check.** Before any live run, verify the setup without calling a model:
 
 ```bash
-python -m app.live_check --scenario balance                  # requires bedrock
-python -m app.live_check --scenario balance --provider ollama  # requires ollama
+python -m app.live_check --preflight --provider gemini
 ```
 
-A run that asks for Bedrock will **refuse** rather than fall back to Ollama —
-a pass from the wrong provider proves nothing about the one being validated.
-There is a test for that.
+## The agent's 22 tools
 
-### The scenarios
+| Area | Tools |
+|---|---|
+| **Amounts** | `parse_amount`: "40k", "1.5 lakh", "Rs 40,000/-" → minor units |
+| **Clients** | `find_client` · `create_client` · `list_clients` · `update_client` |
+| **Invoices** | `create_invoice` · `get_invoice` · `list_invoices` · `get_next_invoice_number` |
+| **Payments** | `record_payment` · `get_payment` · `list_payments` |
+| **Reports** | `get_overdue_invoices` · `get_outstanding_invoices` · `get_client_balance` · `get_financial_summary` |
+| **Reminders** | `create_payment_reminder` · `approve_reminder` · `cancel_reminder` · `list_reminders` |
+| **Documents** | `generate_invoice_pdf` · `generate_receipt` |
 
-Run them in this order; do not go further if an earlier one fails.
+A test (`tests/test_agent_wiring.py`) walks `app/tools` and fails if any tool
+exists but isn't registered with the agent.
 
-```bash
-python -m app.live_check --scenario balance     # 1. a read. Does it call a tool at all?
-python -m app.live_check --scenario payment     # 2. a real mutation
-python -m app.live_check --scenario unknown     # 3. no such client; must not invent
-python -m app.live_check --scenario ambiguous   # two Rahuls; must ask
-python -m app.live_check --scenario missing     # no amount given; must ask
-python -m app.live_check --scenario shorthand   # "40k" must go via parse_amount
-python -m app.live_check --scenario payment --full   # all 21 tools available
-```
+## API reference
 
-Each prints the database before and after, the exact tool calls with arguments,
-and the reply — so you can check the answer came from the ledger rather than
-from the model. A financial reply with **no tool calls** is a hallucination, and
-the output says so explicitly.
+Every failure has one shape: `{"error": "<code>", "detail": "<human-readable>"}`.
+A refused write (duplicate, overpayment, nothing outstanding) is a **409** that
+carries the tool's own explanation. Full interactive docs are at `/docs`.
 
-Each run uses a scratch database, so live checks never touch real records.
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Liveness |
+| `GET` | `/api/agent/status` | Which model provider is available, and why not |
+| `POST` | `/api/chat` | One agent turn: reply, tool calls, result card |
+| `DELETE` | `/api/chat/{session_id}` | Forget a conversation |
+| `POST` | `/api/amounts/parse` | Parse "40k" into minor units |
+| `GET` / `POST` | `/api/clients` | List / create clients |
+| `GET` / `PATCH` | `/api/clients/{id}` | Client with balance and history / edit a field |
+| `GET` / `POST` | `/api/invoices` | List / create invoices |
+| `GET` | `/api/invoices/{id}` | Invoice with its payments |
+| `GET` | `/api/invoices/{id}/pdf` | Invoice PDF |
+| `GET` / `POST` | `/api/payments` | Ledger (filter by client, invoice, date range) / record a payment |
+| `GET` | `/api/payments/{id}` | One payment |
+| `GET` | `/api/payments/{id}/receipt` | Receipt PDF |
+| `GET` / `POST` | `/api/reminders` | List / draft reminders |
+| `POST` | `/api/reminders/{id}/approve` | Approve a draft |
+| `POST` | `/api/reminders/{id}/cancel` | Withdraw a reminder |
+| `GET` | `/api/reports/overview` | Everything the Overview screen shows |
+| `GET` | `/api/reports/summary` | Period summary |
+| `GET` | `/api/reports/monthly` | Invoiced vs received per month, with chart scale |
+| `GET` | `/api/reports/clients` | Per-client breakdown |
+| `GET` | `/api/reports/overdue` | Overdue invoices, most overdue first |
+| `GET` | `/api/reports/outstanding` | Every invoice with money owed |
+| `GET` | `/api/workspaces` | The available ledgers and what each holds |
 
-```bash
-pytest -m live                        # the 11 live-model tests, opt-in
-```
-
-**Status: harness proven, no successful call yet.** AWS credentials resolve and
-`--preflight` passes. The default model was Anthropic Claude Sonnet 4.6 until
-its Bedrock model access came back `authorizationStatus: NOT_AUTHORIZED` /
-`agreementAvailability: NOT_AVAILABLE` (the third-party usage-terms agreement
-had not been accepted) — the switch to Amazon Nova above removes that specific
-gate. No live call has yet succeeded from this repository.
-
-## Deployment
-
-The agent deploys to Amazon Bedrock AgentCore Runtime.
-`app/agentcore_app.py` implements the runtime contract (`0.0.0.0:8080`,
-`POST /invocations`, `GET /ping`, ARM64) and calls the same `AgentService` the
-API calls — no tool code changed for it.
-
-```bash
-python -m app.agentcore_app          # run the runtime contract locally
-```
-
-**Before deploying against real data, read the storage section of
-[docs/AGENTCORE.md](docs/AGENTCORE.md).** AgentCore gives each session its own
-microVM with an ephemeral, per-session filesystem, so the SQLite database is
-neither shared between sessions nor durable across deploys. The runtime reports
-that as a readiness warning on every invocation rather than letting it pass
-unnoticed, and the doc sets out the smallest migration path.
-
-## Security
-
-**Server filesystem paths never cross the HTTP boundary.** `pdf_path` and
-`receipt_path` are replaced with `pdf_available` / `receipt_available` on the
-way out, and any absolute path left in free text is redacted. A path in a
-response leaks the server's directory layout and, on a developer machine, the
-operator's own name.
-
-**Documents are served only from the directories this app owns.** The path
-comes from a database column, and "only we write that column" is an assumption
-that quietly stops being true — so containment is re-checked at the point of
-use, after resolving symlinks and `..`. A stored path pointing anywhere else is
-refused and the document regenerated in place.
-
-**A wildcard CORS origin is refused at start-up.** This API sends credentialed
-requests; `*` with credentials makes the browser echo whatever `Origin` it was
-given, which would let any site read a user's billing data. Setting
-`FF_CORS_ORIGINS=*` raises rather than starts.
-
-**No SQL is assembled from a variable.** Every statement is parameterised, and
-the one per-field update uses a fixed statement per field rather than an
-allowlisted format string — so widening that allowlist later cannot introduce
-injection.
-
-**Error messages are sanitised before they reach a client.** Exception text
-routinely carries paths; anything still path-shaped after redaction is replaced
-with a generic message rather than trusting the redaction.
-
-**The agent session store is bounded** — a TTL and a hard cap. Each session
-holds a live agent and its whole conversation, so an unbounded store is a
-memory leak with a network-facing trigger. Session ids are server-issued and
-validated, so a caller cannot name a session it was not given.
-
-## Design decisions
-
-**Money is stored as integer minor units** (paise, cents) — never floats. A
-rounding error in an invoice total is not an acceptable failure mode.
-
-**"Overdue" is derived, never stored.** It is computed from `due_date` and
-outstanding balance at read time, so it cannot go stale while the app sits idle.
-
-**Every tool returns an explicit `status`.** `found` / `not_found` / `ambiguous`
-/ `already_exists` / `error`. This is what lets the agent say "I couldn't find
-Rahul — should I create him?" instead of inventing a client. The system prompt
-forbids reporting an action as done unless a tool actually returned success.
-
-**Client names are deduplicated** via a normalised `name_key` with a unique
-index, so "Rahul", "rahul " and "RAHUL" cannot become three separate clients.
-
-**The database assigns invoice numbers, not the model.** `create_invoice`
-reserves the number from a counter inside the same transaction as the insert, so
-a failed insert returns the number rather than leaving a gap in the sequence.
-`get_next_invoice_number` is a preview that deliberately does not reserve.
-
-**`amount_paid` is not a column.** It is `SUM(payments.amount_minor)`, computed
-on every read, so the stated balance and the payment ledger cannot disagree.
-Delete a payment row and every balance in the system changes with it -- there is
-a test asserting exactly that.
-
-**Invoice status is a cache of the ledger, not an independent fact.** It is
-recalculated inside the same transaction as every payment write, so UNPAID ->
-PARTIALLY_PAID -> PAID follows the money rather than the model's opinion.
-A cancelled invoice keeps its status and refuses payments outright.
-
-**Payments cannot overshoot.** A payment larger than the outstanding balance is
-refused with the real figure in the error, rather than being recorded and
-leaving a negative balance to explain later.
-
-**A payment keeps one receipt number for life.** Calling `generate_receipt`
-again returns the existing receipt instead of issuing a second number, and the
-number is reserved in the same transaction as the render, so a failed render
-gives it back rather than leaving a gap in the sequence.
-
-**A receipt records a moment, not a live view.** Each one shows the balance as
-it stood when that money arrived, computed in SQL from the payments up to and
-including it -- so regenerating an old receipt after later payments still shows
-the historical balance.
-
-**The model does no financial arithmetic.** `parse_amount` turns the user's own
-words -- "40k", "1.5 lakh", "Rs 40,000/-", "$250" -- into minor units in Python.
-The model passes the characters through; it never multiplies by 100 itself. Text
-holding two numbers, or no number, is refused rather than guessed at.
-
-**An identical invoice is flagged, not silently duplicated.** Same client, same
-project, same amount, same day returns `duplicate_suspected` with the existing
-invoice; the agent has to come back with `allow_duplicate=true` after asking.
-
-**The model never generates documents.** It calls a tool; deterministic Python
-renders the PDF. Layout, wording and every figure on the page are fixed code
-reading from SQLite. The LLM is the orchestrator, not the printer. PDF tests
-read the text back out of the generated file rather than trusting the return
-value, so a document that reports success but prints the wrong balance fails.
-
-**INR is written with Indian digit grouping** -- ₹1,50,000.00, not ₹150,000.00.
-Other currencies keep western grouping and their own decimal rules, so JPY
-prints ¥150,000 with no decimals. Formatting is integer arithmetic throughout;
-nothing rounds.
-
-**The rupee sign is absent from the PDF core fonts.** The generator locates and
-embeds a system font that carries U+20B9, searching Windows, Linux and macOS
-paths so a container build still renders correctly. If no such font exists it
-falls back to "Rs. " rather than printing a black box.
-
-**Document generation is a separate step from invoice creation.** A failed
-render cannot take an invoice down with it, and the agent is told never to
-claim a document exists unless `generate_invoice_pdf` returned "created".
-
-**Every reporting tool is read-only and derived at query time.** There is no
-stored `overdue`, `monthly_revenue`, or `total_outstanding` anywhere. Close the
-app for three weeks and reopen it: every figure is exactly as correct as if it
-had been running the whole time, because nothing was cached while it was closed.
-
-**Money is never summed across currencies.** `get_overdue_invoices`,
-`get_outstanding_invoices`, `get_client_balance` and `get_financial_summary` all
-return a list of `{currency, total_minor, total_display}`, one entry per
-currency present, rather than a single total that would silently add USD and
-INR together. `list_invoices`/`list_payments` predate this and still sum
-regardless of currency -- fine for a single-currency freelancer, a latent bug
-for anyone billing in more than one. Worth fixing before Phase 5 if that matters.
-
-**`get_outstanding_invoices` and `get_overdue_invoices` are deliberately
-separate**, even though overdue is a subset of outstanding. An invoice due next
-week and an invoice four days late are both outstanding, but a freelancer
-chasing late payments needs the narrower list, not everything they're owed.
-
-**A financial summary's period and its snapshot don't mean the same thing.**
-`received` and the invoice-issued counts are scoped to `start_date`/`end_date`
-because they're flows -- money that moved, invoices that went out. `outstanding`
-and `overdue` are current totals across every open invoice regardless of when
-it was issued, because a balance owed doesn't belong to a calendar month: an
-invoice from three months ago that's still unpaid is still relevant today.
-Documented explicitly in the tool's docstring since the two halves of one
-return value are scoped differently on purpose.
-
-**A reminder is drafted from the invoice, not phrased by the model.** The
-invoice number, client name, outstanding balance, due date and days overdue in
-the message text all come from `invoice_to_dict` -- the model never edits a
-figure into the wording. A reminder only reaches `APPROVED` through
-`approve_reminder`; there is no send capability at all yet, deliberately.
-
-**The agent loop is tested separately from the model's judgement.**
-`tests/scripted_model.py` is a Strands model with canned replies, so the loop --
-hooks, tool execution, results fed back into the conversation, tracing -- is
-proven offline with no credentials and no spend. The live tests then measure
-only the thing that actually needs a real model: whether it picks the right
-tools. Without that split, a failing live test is ambiguous between "the model
-chose badly" and "our wiring is broken".
-
-**Live tests assert on the tool chain, not the prose.** `ToolTracer` records
-every call, its arguments and its result, and the live tests check those plus
-the resulting database state. A fluent paragraph built on a skipped lookup or
-an invented id is a failure that reads like a success.
-
-**A reminder keeps one active draft per invoice.** Calling
-`create_payment_reminder` again while a `DRAFT` or `APPROVED` reminder already
-exists returns that reminder instead of writing a duplicate; `force=true` after
-the user asks for a second one is the only way past it. A `CANCELLED` reminder
-doesn't block a new draft.
-
-**The browser never talks to Strands.** The frontend calls FastAPI, which calls
-an `AgentService`, which is the only thing in the codebase that constructs an
-Agent or invokes a model. Route handlers do not import Strands. Moving the agent
-to AgentCore later is a change to one service, not to the interface.
-
-**The API declares its own encoding.** The CLI fixes its stdout, but that is a
-property of a terminal process and says nothing about HTTP. `UTF8JSONResponse`
-sets `charset=utf-8` explicitly and there is a test asserting the raw ₹ bytes
-arrive over the wire, rather than trusting a framework default to stay put.
-
-**Every failure has the same shape:** `{"error": code, "detail": text}`. A 404
-from a handler, a validation failure and an unhandled exception all come back
-looking alike, so the frontend has one thing to read instead of three.
-
-**The agent being down does not take the dashboard with it.** Records, reports
-and documents are served entirely from SQLite. `/api/chat` returns 503 with the
-reason when no provider is configured — never a plausible reply. There are tests
-for both halves of that.
-
-**A GET may render a document, and that is deliberate.** `/invoices/{id}/pdf`
-generates the file if it is missing. Rendering is idempotent and derives every
-figure from the database, so it changes no business state — it only ensures the
-document matching current state exists. Receipts go further: a payment keeps one
-receipt number for life, so repeated GETs return the same document rather than
-issuing a second receipt.
-
-## Layout
+## Project structure
 
 ```
 app/
-  agent.py           the Strands Agent: tools + system prompt
-  model_provider.py  Bedrock (Amazon Nova) / Ollama selection
-  database.py        SQLite schema, connections, counters
-  models.py          row -> dict converters (what the model actually reads)
-  money.py           minor-unit validation, parsing and currency formatting
-  pdf_generator.py   deterministic invoice and receipt PDF rendering
-  dates.py           ISO date parsing and derived overdue calculation
-  config.py          paths and settings
-  cli.py             terminal entry point
-  live_check.py      manual live-model smoke test, prints the tool chain
-  tracing.py         records which tools the model chose, and with what
-  tools/
-    amounts.py       parse_amount
-    clients.py       find_client, create_client, list_clients, update_client
-    invoices.py      create_invoice, get_invoice, list_invoices,
-                     get_next_invoice_number, generate_invoice_pdf
-    payments.py      record_payment, get_payment, list_payments,
-                     generate_receipt
-    reports.py       get_overdue_invoices, get_outstanding_invoices,
-                     get_client_balance, get_financial_summary
-    reminders.py     create_payment_reminder, approve_reminder,
-                     list_reminders
+  agent.py              the Strands Agent: 22 tools + system prompt
+  model_provider.py     Gemini / Bedrock / Ollama selection
+  tracing.py            ToolTracer: Strands hooks recording every tool call
+  database.py           SQLite schema, connections, gapless counters
+  workspaces.py         separate ledgers selected per request
+  models.py             row → dict converters (what the model reads)
+  money.py              minor-unit parsing and currency formatting
+  dates.py              ISO dates and derived overdue calculation
+  pdf_generator.py      deterministic invoice and receipt rendering
+  seed.py               demo ledger, dated relative to today
+  preflight.py          free pre-run checks, actionable failure messages
+  live_check.py         manual live-model smoke test, prints the tool chain
+  agentcore_app.py      Amazon Bedrock AgentCore Runtime entrypoint
+  cli.py                terminal entry point
+  tools/                amounts, clients, invoices, payments, reports, reminders
   services/
-    agent_service.py the only thing that invokes Strands
-    data_service.py  read access for the dashboard
+    agent_service.py    the only component that invokes Strands
+    views.py            every derived figure a screen shows
+    data_service.py     read access for the dashboard
+    write_service.py    dashboard writes, through the agent's own tools
   api/
-    main.py          app factory, CORS, one error shape for every failure
-    responses.py     UTF-8 JSON, charset declared
-    routers/         chat, records, reports
-frontend/            Next.js dashboard and agent panel
-tests/
-  scripted_model.py  a Strands model with canned replies, for offline loop tests
-  test_agent_loop.py the loop and tracer, proven without credentials
-  test_agent_live.py real-model tests, skipped unless `-m live`
-data/                SQLite database (gitignored)
-  invoices/          generated invoice PDFs, named FF-0001.pdf
-  receipts/          generated receipts, named RC-0001.pdf
+    main.py             app factory, CORS, one error shape
+    middleware.py       per-request workspace selection
+    routers/            chat, commands, records, reports, workspaces
+frontend/
+  src/lib/api.ts        the only module that knows a backend exists
+  src/pages/            one screen per feature
+  src/components/       UI primitives, modals, sidebar
+deploy/
+  Dockerfile            ARM64 AgentCore container
+  iam/                  least-privilege IAM policies
+docs/
+  AGENTCORE.md          deployment guide and storage limitations
+tests/                  588 offline tests + opt-in live-model tests
 ```
+
+## Testing
+
+```bash
+pytest -q          # 588 tests. No credentials, no network, no spend.
+```
+
+The suite covers money parsing and formatting, invoice numbering, payment and
+status transitions, overdue derivation, reminders, PDF contents (read back out
+of the generated file), every API endpoint, security properties, workspace
+isolation, and the agent loop itself.
+
+**The agent loop is tested without a model.** `tests/scripted_model.py` is a
+Strands model that replays a fixed script of tool calls and replies. It proves
+the hooks, tool execution, tracing and result feedback work offline. The live
+tests then measure only what needs a real model: whether it picks the right
+tools.
+
+**Live tests are opt-in** and assert on the recorded tool chain, not the prose:
+
+```bash
+python -m app.live_check --scenario balance --provider gemini   # one read
+python -m app.live_check --scenario payment --provider gemini   # one write
+pytest -m live                                                  # the full live set
+```
+
+Each live check uses a scratch database, so it never touches real records. The
+default test suite strips `GEMINI_API_KEY` and any provider override from the
+environment, so a key in `.env` can never turn an ordinary test into a live
+model call.
+
+## Design decisions
+
+- **Money is stored as integer minor units**, never floats. Formatting is integer arithmetic throughout, so nothing rounds.
+- **`amount_paid` is not a column.** It's `SUM(payments.amount_minor)` computed on every read, so the stated balance and the payment ledger can't disagree.
+- **"Overdue" is derived, never stored.** It's computed from the due date and the outstanding balance at read time, so it can't go stale while the app sits idle.
+- **The database assigns invoice numbers, not the model.** The number is reserved inside the same transaction as the insert, so a failed insert leaves no gap.
+- **Invoice status follows the money.** It's recalculated inside the same transaction as every payment, so UNPAID → PARTIALLY_PAID → PAID can't drift from the ledger.
+- **Payments can't overshoot.** A payment above the outstanding balance is refused with the real figure.
+- **Duplicates are flagged, not silently written.** An identical invoice or payment returns `duplicate_suspected`, and the caller must confirm with `allow_duplicate=true`.
+- **Client names are deduplicated** through a normalised key with a unique index, so "Rahul", "rahul " and "RAHUL" can't become three clients.
+- **The model does no arithmetic.** `parse_amount` turns "1.5 lakh" into minor units in Python, and text with two numbers or none is refused, not guessed.
+- **Money is never summed across currencies.** Totals are returned as one entry per currency.
+- **A reminder is drafted from the invoice, not phrased by the model.** Every figure in the message comes from the ledger, and nothing is ever sent without human approval.
+- **A receipt records a moment.** It shows the balance as it stood when that payment arrived, even if regenerated after later payments.
+
+## Security
+
+- **Server paths never cross the HTTP boundary.** File paths are replaced with `pdf_available` / `receipt_available`, and absolute paths in free text are redacted.
+- **Documents are served only from directories the app owns.** Containment is re-checked at the point of use, after resolving symlinks and `..`.
+- **A wildcard CORS origin is refused at start-up**, because the API sends credentialed requests.
+- **All SQL is parameterised.**
+- **Error messages are sanitised** before they reach a client. Unexpected exceptions return a generic message, and the traceback stays in the server log.
+- **Agent sessions are bounded** by a TTL and a hard cap, and session ids are server-issued so a caller can't name another user's session.
+- **Workspaces are isolated.** Each ledger is its own database and document folder, and an agent conversation never continues across workspaces.
+- **API keys never leave the server.** They're read from the environment, never logged, and never returned by `/api/agent/status`.
+
+## Deployment
+
+### Hosted demo (Render, one URL)
+
+The root `Dockerfile` builds the dashboard and runs FastAPI, which serves it
+alongside `/api`, so the whole app lives at one address. `render.yaml`
+describes the service.
+
+1. Push the repository to GitHub.
+2. In [Render](https://render.com): **New → Blueprint**, then select the repository.
+3. When asked for `GEMINI_API_KEY`, paste a key from
+   [aistudio.google.com/apikey](https://aistudio.google.com/apikey). It's
+   stored as a secret in Render, never in the repository.
+4. Deploy. Share the `https://<service>.onrender.com` URL.
+
+**Visitors never enter a key.** The key lives only in the server's
+environment; the browser never sees it.
+
+What the container does on start:
+
+- **Serves the dashboard and the API from one origin**, so there's no CORS configuration.
+- **Seeds the demo ledger if the database is empty** (`FF_SEED_DEMO=true`). Free hosts wipe the disk on restart, so every restart comes back to the same starting point, with Rahul's ₹40,000 invoice unpaid and ready for the walkthrough.
+- **Keeps Gemini's thinking low** (`FF_GEMINI_THINKING=low`). A multi-step turn takes about ten seconds instead of over a minute.
+
+Notes for a public demo:
+
+- Everyone using the URL shares your key's free-tier quota. When the limit is reached, the agent says so rather than failing silently.
+- Render's free tier sleeps when idle, so the first visit after a quiet period can take close to a minute to wake.
+- Data written by visitors is lost when the instance restarts. That's intentional for a demo and wrong for real use; see [Status](#status-limitations-and-roadmap).
+
+Run the same container locally:
+
+```bash
+docker build -t freelanceflow .
+docker run -p 8000:8000 -e GEMINI_API_KEY=your-key freelanceflow
+# open http://localhost:8000
+```
+
+### Amazon Bedrock AgentCore Runtime
+
+The agent is also packaged for **Amazon Bedrock AgentCore Runtime**.
+`app/agentcore_app.py` implements the runtime contract (`0.0.0.0:8080`,
+`POST /invocations`, `GET /ping`, ARM64) and calls the same `AgentService` the
+API uses, so no tool code changes for deployment.
+
+```bash
+python -m app.agentcore_app    # run the runtime contract locally
+```
+
+`deploy/` holds the ARM64 Dockerfile and least-privilege IAM policies (no
+`bedrock:*`, no `bedrock-agentcore:*`). **Read
+[docs/AGENTCORE.md](docs/AGENTCORE.md) before deploying against real data.**
+AgentCore sessions have ephemeral per-session storage, so SQLite there is
+neither shared nor durable. The doc sets out the migration path (EFS-mounted
+SQLite or Postgres).
+
+## Status, limitations and roadmap
+
+**Working today**
+
+- The full deterministic business layer: 22 tools, 588 passing tests
+- The dashboard, all ten screens wired to the live API with no mock data
+- The agent running live on Google Gemini through Strands, verified end to end: a read question produced the correct tool chain (`find_client → get_client_balance`) and the correct balance
+- Invoice and receipt PDFs
+- Workspace isolation in the API
+- One-URL deployment: a Dockerfile and Render blueprint that serve the dashboard and API together and seed the demo ledger on start
+
+**Known limitations**
+
+- **Agent replies take seconds, not milliseconds.** A two-tool turn measured about 10 seconds on `gemini-3.6-flash` with low thinking, and longer turns take proportionally longer.
+- **The Bedrock path is implemented but not yet live-validated.** Bedrock model access hadn't been granted on the development account.
+- **SQLite is single-node.** Fine for one freelancer, not for multi-tenant or AgentCore production (see [docs/AGENTCORE.md](docs/AGENTCORE.md)).
+- **Reminders aren't sent.** There's no email or messaging integration; approved reminders are copied and sent by hand.
+- **The `list_invoices` / `list_payments` tool totals** sum a single currency. The dashboard's figures are per-currency, but the agent's list tools assume one currency.
+
+**In progress**
+
+- **Workspace chooser in the dashboard**: open on "Existing dashboard" (demo data) or "New dashboard" (an empty ledger). The API side is built and tested; the opening screen and switcher are next.
+- **Live agent activity**: streaming each tool call to the dashboard as it runs, not after the turn. The tracer already emits the events; the streaming endpoint and panel are next.
+- **Before/after balance cards** and an **audit trail** of ledger changes.
+
+**Later**
+
+- Postgres storage for multi-user and AgentCore deployments
+- Sending approved reminders by email or WhatsApp
+- Bank-statement import and automatic payment matching
+
+## License
+
+FreelanceFlow is released under the [MIT License](LICENSE).

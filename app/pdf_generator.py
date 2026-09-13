@@ -31,6 +31,7 @@ from app.config import (
     RECEIPTS_DIR,
     ensure_dirs,
 )
+from app import workspaces
 from app.database import get_db, next_counter
 from app.dates import parse_date
 from app.models import (
@@ -297,7 +298,7 @@ def create_invoice_pdf(invoice_id: int, output_dir: Path | None = None) -> dict:
             }
         )
 
-        directory = Path(output_dir) if output_dir else INVOICES_DIR
+        directory = Path(output_dir) if output_dir else (workspaces.invoices_dir() or INVOICES_DIR)
         path = directory / f"{invoice['invoice_number']}.pdf"
 
         try:
@@ -509,7 +510,7 @@ def create_receipt_pdf(
             receipt_number = existing_number or format_receipt_number(
                 next_counter(conn, "receipt")
             )
-            directory = Path(output_dir) if output_dir else RECEIPTS_DIR
+            directory = Path(output_dir) if output_dir else (workspaces.receipts_dir() or RECEIPTS_DIR)
             path = directory / f"{receipt_number}.pdf"
 
             try:

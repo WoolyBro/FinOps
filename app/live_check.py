@@ -3,6 +3,7 @@
     python -m app.live_check --preflight            # checks only, no model call
     python -m app.live_check --scenario balance     # one call
     python -m app.live_check --scenario payment     # one call, one mutation
+    python -m app.live_check --provider gemini      # Gemini, free tier
     python -m app.live_check --provider ollama      # develop without AWS
 
 Prints the tool chain the model chose, so you can see *why* an answer was right
@@ -178,11 +179,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--full", action="store_true",
-        help="give the agent all 21 tools instead of the scenario's subset",
+        help="give the agent all 22 tools instead of the scenario's subset",
     )
     parser.add_argument("--prompt", help="override the scenario's prompt")
     parser.add_argument(
-        "--provider", default="bedrock", choices=("bedrock", "ollama"),
+        "--provider", default="bedrock", choices=("bedrock", "gemini", "ollama"),
         help="which provider this run requires (default: bedrock)",
     )
     parser.add_argument(
@@ -241,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
     agent = build_agent(tools=tools, tracer=tracer)
 
     prompt = args.prompt or scenario["prompt"]
-    tool_count = "all 21" if tools is None else str(len(tools))
+    tool_count = "all 22" if tools is None else str(len(tools))
 
     print()
     print(f"scenario : {args.scenario}")

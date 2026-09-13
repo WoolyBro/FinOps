@@ -37,6 +37,13 @@ class ChatResponse(BaseModel):
     tool_calls: list[ToolCall]
     turn: int
     elapsed_seconds: float
+    result_card: dict | None = Field(
+        None,
+        description=(
+            "The record this turn created, taken from the tool result: "
+            "{type: payment|invoice|reminder, ...}. Null when nothing was written."
+        ),
+    )
 
 
 class AgentStatus(BaseModel):

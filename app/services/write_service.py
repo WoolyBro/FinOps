@@ -19,7 +19,11 @@ from app.security import scrub
 from app.tools.clients import create_client, update_client
 from app.tools.invoices import create_invoice
 from app.tools.payments import record_payment
-from app.tools.reminders import approve_reminder, create_payment_reminder
+from app.tools.reminders import (
+    approve_reminder,
+    cancel_reminder,
+    create_payment_reminder,
+)
 
 
 class Rejected(ValueError):
@@ -147,3 +151,7 @@ def draft_reminder(invoice_id: int, force: bool = False) -> dict:
 
 def approve(reminder_id: int) -> dict:
     return _unwrap(approve_reminder(reminder_id=reminder_id), ("approved",))
+
+
+def cancel(reminder_id: int) -> dict:
+    return _unwrap(cancel_reminder(reminder_id=reminder_id), ("cancelled",))

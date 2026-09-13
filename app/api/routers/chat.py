@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_agent_service
 from app.api.schemas import AgentStatus, ChatRequest, ChatResponse
-from app.services.agent_service import AgentService, AgentUnavailable
+from app.services.agent_service import AgentFailed, AgentService, AgentUnavailable
 
 router = APIRouter(tags=["agent"])
 
@@ -42,6 +42,17 @@ def chat(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"error": "agent_unavailable", "detail": exc.detail},
+        ) from exc
+    except AgentFailed as exc:
+        # 502: the model upstream failed. The operations that completed before
+        # it did are returned, because some of them may have written.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": "agent_failed",
+                "detail": exc.detail,
+                "result": {"tool_calls": exc.tool_calls},
+            },
         ) from exc
     except ValueError as exc:
         raise HTTPException(

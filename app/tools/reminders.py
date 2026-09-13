@@ -167,6 +167,48 @@ def approve_reminder(reminder_id: int) -> dict:
 
 
 @tool
+def cancel_reminder(reminder_id: int) -> dict:
+    """Withdraw a reminder so it does not go out.
+
+    The reminder is kept, marked CANCELLED, rather than deleted: what was
+    drafted about a client's money stays on record. Once cancelled, a new
+    reminder can be prepared for the same invoice without force.
+
+    Args:
+        reminder_id: The reminder's id, from create_payment_reminder or
+            list_reminders.
+
+    Returns:
+        status "cancelled" with the reminder, "not_found", or "error" if it
+        has already been sent.
+    """
+    with get_db() as conn:
+        row = conn.execute(
+            REMINDER_SELECT + " WHERE r.id = ?", (reminder_id,)
+        ).fetchone()
+        if not row:
+            return {"status": "not_found", "reminder_id": reminder_id}
+
+        if row["status"] == "CANCELLED":
+            return {"status": "cancelled", "reminder": reminder_to_dict(row)}
+        if row["status"] == "SENT":
+            return {
+                "status": "error",
+                "reminder_id": reminder_id,
+                "error": "Reminder has already been sent and cannot be cancelled.",
+            }
+
+        conn.execute(
+            "UPDATE reminders SET status = 'CANCELLED' WHERE id = ?", (reminder_id,)
+        )
+        updated = conn.execute(
+            REMINDER_SELECT + " WHERE r.id = ?", (reminder_id,)
+        ).fetchone()
+
+    return {"status": "cancelled", "reminder": reminder_to_dict(updated)}
+
+
+@tool
 def list_reminders(
     invoice_id: int | None = None,
     client_id: int | None = None,

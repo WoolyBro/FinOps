@@ -36,6 +36,7 @@ from app.tools.reports import (
 )
 from app.tools.reminders import (
     approve_reminder,
+    cancel_reminder,
     create_payment_reminder,
     list_reminders,
 )
@@ -65,6 +66,7 @@ TOOLS = [
     # Reminders
     create_payment_reminder,
     approve_reminder,
+    cancel_reminder,
     list_reminders,
     # Documents
     generate_invoice_pdf,

@@ -244,7 +244,7 @@ def test_every_tool_is_offered_to_the_model(rahul_with_invoice):
 
     offered = {spec["name"] for spec in agent.model.requests[0]["tool_specs"]}
     assert offered == {t.tool_name for t in TOOLS}
-    assert len(offered) == 21
+    assert len(offered) == 22
 
 
 def test_the_system_prompt_reaches_the_model(rahul_with_invoice):

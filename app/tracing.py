@@ -11,10 +11,18 @@ This is also what the demo's "agent activity" panel will read from later.
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, HookRegistry
+from strands.hooks import (
+    AfterModelCallEvent,
+    AfterToolCallEvent,
+    BeforeModelCallEvent,
+    BeforeToolCallEvent,
+    HookRegistry,
+)
 
 
 @dataclass
@@ -49,12 +57,44 @@ class ToolTracer:
         self.calls: list[ToolCall] = []
         self.echo = echo
         self._by_use_id: dict[str, ToolCall] = {}
+        self._started: dict[int, float] = {}
+        self._model_started: float | None = None
+        # Called with a small dict the moment something happens, so a UI can
+        # show each step as it runs rather than the whole trace at the end.
+        # Set per turn by AgentService; None when nobody is watching.
+        self.listener: Callable[[dict], None] | None = None
 
     # --- HookProvider -----------------------------------------------------
 
     def register_hooks(self, registry: HookRegistry, **_: Any) -> None:
         registry.add_callback(BeforeToolCallEvent, self._on_before)
         registry.add_callback(AfterToolCallEvent, self._on_after)
+        registry.add_callback(BeforeModelCallEvent, self._on_model_before)
+        registry.add_callback(AfterModelCallEvent, self._on_model_after)
+
+    def _emit(self, event: dict) -> None:
+        if self.listener is None:
+            return
+        try:
+            self.listener(event)
+        except Exception:  # a broken viewer must never break the turn
+            pass
+
+    def _on_model_before(self, event: BeforeModelCallEvent) -> None:
+        self._model_started = time.perf_counter()
+        self._emit({"type": "model_start"})
+
+    def _on_model_after(self, event: AfterModelCallEvent) -> None:
+        started = self._model_started
+        self._model_started = None
+        self._emit(
+            {
+                "type": "model_end",
+                "duration_seconds": round(time.perf_counter() - started, 3)
+                if started is not None
+                else None,
+            }
+        )
 
     def _on_before(self, event: BeforeToolCallEvent) -> None:
         tool_use = event.tool_use or {}
@@ -63,11 +103,16 @@ class ToolTracer:
             arguments=dict(tool_use.get("input") or {}),
         )
         self.calls.append(call)
+        index = len(self.calls) - 1
+        self._started[index] = time.perf_counter()
         use_id = tool_use.get("toolUseId")
         if use_id:
             self._by_use_id[use_id] = call
         if self.echo:
             print(f"  -> {call.name}({_short(call.arguments)})")
+        self._emit(
+            {"type": "tool_start", "index": index, "tool": call.name, "arguments": call.arguments}
+        )
 
     def _on_after(self, event: AfterToolCallEvent) -> None:
         tool_use = event.tool_use or {}
@@ -77,7 +122,11 @@ class ToolTracer:
         if call is None:
             return
 
-        call.duration_seconds = getattr(event, "duration", None)
+        index = self.calls.index(call)
+        measured = getattr(event, "duration", None)
+        if measured is None and index in self._started:
+            measured = round(time.perf_counter() - self._started[index], 3)
+        call.duration_seconds = measured
         if event.exception is not None:
             call.error = str(event.exception)
         else:
@@ -86,6 +135,16 @@ class ToolTracer:
         if self.echo:
             outcome = call.error or call.status or "ok"
             print(f"     {outcome}")
+        self._emit(
+            {
+                "type": "tool_end",
+                "index": index,
+                "tool": call.name,
+                "status": call.status,
+                "error": call.error,
+                "duration_seconds": call.duration_seconds,
+            }
+        )
 
     # --- reading the trace ------------------------------------------------
 
@@ -106,6 +165,8 @@ class ToolTracer:
     def reset(self) -> None:
         self.calls.clear()
         self._by_use_id.clear()
+        self._started.clear()
+        self._model_started = None
 
     def format(self) -> str:
         """A readable trace, for test failure messages and manual runs."""

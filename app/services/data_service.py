@@ -22,10 +22,10 @@ from app.tools.payments import get_payment, list_payments
 from app.tools.reminders import list_reminders
 from app.tools.reports import (
     get_client_balance,
-    get_financial_summary,
     get_outstanding_invoices,
     get_overdue_invoices,
 )
+from app.services.views import payments_ledger, period_summary
 
 
 class NotFound(LookupError):
@@ -48,8 +48,13 @@ def _document_dirs() -> list[Path]:
     check can never be comparing against a different directory than the one
     the renderer actually used.
     """
-    from app import pdf_generator
+    from app import pdf_generator, workspaces
 
+    workspace = workspaces.current()
+    if workspace is not None:
+        # Only this workspace's folders: a document from another ledger is
+        # not served, even if its path happens to be stored.
+        return [workspace.invoices_dir, workspace.receipts_dir]
     return [Path(pdf_generator.INVOICES_DIR), Path(pdf_generator.RECEIPTS_DIR)]
 
 
@@ -135,9 +140,15 @@ def invoice_pdf(invoice_id: int) -> Path:
 
 
 def payments(invoice_id: int | None = None, client_id: int | None = None,
-             limit: int = 100) -> dict:
-    return scrub(
-        list_payments(invoice_id=invoice_id, client_id=client_id, limit=limit)
+             limit: int = 100, start_date: str | None = None,
+             end_date: str | None = None) -> dict:
+    """The ledger for a filter, with its total computed over every match."""
+    return payments_ledger(
+        invoice_id=invoice_id,
+        client_id=client_id,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
     )
 
 
@@ -191,17 +202,34 @@ def reminders(
     )
     if result["status"] == "error":
         raise ValueError(result["error"])
-    return scrub(result)
+    return scrub({**result, "reminders": [_against_current_balance(r) for r in result["reminders"]]})
+
+
+def _against_current_balance(reminder: dict) -> dict:
+    """Flag a live reminder whose wording no longer matches the ledger.
+
+    A reminder's text is a snapshot, deliberately: it records what was said.
+    But a payment that lands after drafting makes the amount in it wrong, and
+    the page offers that text for copying and sending to the client. The
+    message is composed with the invoice's exact outstanding_display, so a
+    string comparison against today's figure is precise, not a heuristic.
+    """
+    live = reminder["reminder_status"] in ("DRAFT", "APPROVED")
+    invoice = get_invoice(invoice_id=reminder["invoice_id"]).get("invoice") or {}
+    current = invoice.get("outstanding_display")
+    return {
+        **reminder,
+        "current_outstanding_minor": invoice.get("outstanding_minor"),
+        "current_outstanding_display": current,
+        "balance_changed": bool(live and current and current not in reminder["message"]),
+    }
 
 
 # --- reports ---------------------------------------------------------------
 
 
 def summary(start_date: str | None = None, end_date: str | None = None) -> dict:
-    result = get_financial_summary(start_date=start_date, end_date=end_date)
-    if result["status"] == "error":
-        raise ValueError(result["error"])
-    return scrub(result)
+    return period_summary(start_date=start_date, end_date=end_date)
 
 
 def overdue(client_id: int | None = None) -> dict:

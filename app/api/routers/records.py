@@ -25,6 +25,21 @@ def _document_unavailable(exc: DocumentUnavailable) -> HTTPException:
     )
 
 
+def _pdf(path) -> FileResponse:
+    """Serve a document for viewing in the browser.
+
+    Inline rather than attachment: an attachment disposition makes the browser
+    download the file instead of showing it, which leaves any embedded viewer
+    blank. The filename is still sent, so saving it keeps the invoice number.
+    """
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=path.name,
+        content_disposition_type="inline",
+    )
+
+
 # --- clients ---------------------------------------------------------------
 
 
@@ -87,7 +102,7 @@ def get_invoice_pdf(invoice_id: int) -> FileResponse:
     except DocumentUnavailable as exc:
         raise _document_unavailable(exc) from exc
 
-    return FileResponse(path, media_type="application/pdf", filename=path.name)
+    return _pdf(path)
 
 
 # --- payments --------------------------------------------------------------
@@ -97,12 +112,24 @@ def get_invoice_pdf(invoice_id: int) -> FileResponse:
 def get_payments(
     invoice_id: int | None = None,
     client_id: int | None = None,
+    start_date: str | None = Query(None, description="YYYY-MM-DD, inclusive."),
+    end_date: str | None = Query(None, description="YYYY-MM-DD, inclusive."),
     limit: int = Query(100, ge=1, le=200),
 ) -> dict:
-    """Payments received, newest first."""
-    return data_service.payments(
-        invoice_id=invoice_id, client_id=client_id, limit=limit
-    )
+    """Payments received, newest first, with the total for this filter."""
+    try:
+        return data_service.payments(
+            invoice_id=invoice_id,
+            client_id=client_id,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"error": "invalid_request", "detail": str(exc)},
+        ) from exc
 
 
 @router.get("/payments/{payment_id}")
@@ -123,7 +150,7 @@ def get_receipt_pdf(payment_id: int) -> FileResponse:
     except DocumentUnavailable as exc:
         raise _document_unavailable(exc) from exc
 
-    return FileResponse(path, media_type="application/pdf", filename=path.name)
+    return _pdf(path)
 
 
 # --- reminders -------------------------------------------------------------

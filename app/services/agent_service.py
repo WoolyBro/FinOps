@@ -5,7 +5,7 @@ an Agent, never touch a model, and never see a tool. That boundary is what
 makes the eventual AgentCore move a change of one file rather than a rewrite of
 the API:
 
-    Browser -> Next.js -> FastAPI -> AgentService -> Strands -> tools -> SQLite
+    Browser -> React (Vite) -> FastAPI -> AgentService -> Strands -> tools -> SQLite
 
 The service also refuses to pretend. If no model provider is configured, chat
 raises AgentUnavailable and the API reports that honestly, rather than
@@ -14,15 +14,21 @@ returning a plausible-looking reply that no model produced.
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from app.agent import build_agent
-from app.model_provider import ModelNotConfigured, provider_status
-from app.tracing import ToolTracer
+from app.model_provider import ModelNotConfigured, ollama_host, provider_status
+from app.preflight import diagnose_failure
+from app.security import redact_paths, scrub
+from app.tracing import ToolCall, ToolTracer
+
+log = logging.getLogger(__name__)
 
 
 # A session holds a live Agent and its whole conversation, so an unbounded
@@ -44,6 +50,77 @@ class AgentUnavailable(RuntimeError):
         super().__init__(detail)
 
 
+class AgentFailed(RuntimeError):
+    """The model failed partway through a turn.
+
+    Carries the tool calls that completed before the failure: a turn can die
+    after record_payment succeeded, and the user needs to see that it did.
+    """
+
+    def __init__(self, detail: str, tool_calls: list[dict]):
+        self.detail = detail
+        self.tool_calls = tool_calls
+        super().__init__(detail)
+
+
+def _is_connection_failure(exc: BaseException) -> bool:
+    seen: BaseException | None = exc
+    while seen is not None:
+        name = type(seen).__name__
+        if isinstance(seen, ConnectionError) or "ConnectError" in name or "Connection refused" in str(seen):
+            return True
+        seen = seen.__cause__ or seen.__context__
+    return False
+
+
+def explain_failure(exc: BaseException, status: dict) -> str:
+    """A browser-safe, actionable account of why the model call failed.
+
+    Recognised Bedrock causes get the preflight diagnosis. Anything else gets
+    the exception's type only: raw provider errors can carry account ids,
+    ARNs and paths, and those belong in the server log, not on a page.
+    """
+    provider = status.get("provider")
+    model = status.get("model_id") or "the model"
+
+    if provider == "gemini":
+        text = f"{type(exc).__name__} {exc}"
+        if "API_KEY_INVALID" in text or "API key not valid" in text:
+            return (
+                "Google rejected the Gemini API key. Check GEMINI_API_KEY in "
+                ".env against https://aistudio.google.com/apikey, then restart the API."
+            )
+        if "RESOURCE_EXHAUSTED" in text or " 429" in text or "quota" in text.lower():
+            return (
+                f"The Gemini free-tier limit for {model} was reached. Wait a "
+                "minute and try again; the daily limit resets at midnight Pacific time."
+            )
+        if "NOT_FOUND" in text or " 404" in text:
+            retired = "no longer available" in text
+            return (
+                f"Google {'has retired' if retired else 'does not offer'} {model} "
+                "for this key. Set FF_MODEL_ID in .env to a model the key can "
+                "use -- the models list at https://aistudio.google.com shows them."
+            )
+        if _is_connection_failure(exc):
+            return "Could not reach Google's Gemini API. Check the internet connection."
+
+    if provider == "ollama" and _is_connection_failure(exc):
+        return (
+            f"Could not reach Ollama at {ollama_host()}. Start it with "
+            f"`ollama serve` (and `ollama pull {model}`), or set "
+            "FF_MODEL_PROVIDER=bedrock."
+        )
+    if provider == "bedrock":
+        diagnosis = diagnose_failure(exc, model, status.get("region"))
+        if not diagnosis.startswith(f"{type(exc).__name__}: "):
+            return redact_paths(" ".join(line.strip() for line in diagnosis.splitlines()))
+    return (
+        f"The model ({model}) failed before it could reply "
+        f"({type(exc).__name__}). The server log has the details."
+    )
+
+
 @dataclass
 class Session:
     """One conversation. The Agent carries its own message history."""
@@ -53,6 +130,9 @@ class Session:
     tracer: ToolTracer
     created_at: str
     last_used: datetime
+    # The ledger this conversation belongs to. A session is never continued
+    # from another workspace: its history is about the other ledger's clients.
+    workspace: str | None = None
     turns: int = 0
     history: list[dict] = field(default_factory=list)
 
@@ -81,7 +161,10 @@ class AgentService:
     def _new_session(self) -> Session:
         tracer = ToolTracer()
         try:
-            agent = build_agent(tracer=tracer)
+            # No console callback: Strands' default prints every streamed
+            # reply to stdout, which on a host is the log -- client names and
+            # amounts included. The trace and the API response carry it instead.
+            agent = build_agent(tracer=tracer, callback_handler=None)
         except ModelNotConfigured as exc:
             raise AgentUnavailable(str(exc)) from exc
 
@@ -91,6 +174,7 @@ class AgentService:
             tracer=tracer,
             created_at=_now(),
             last_used=datetime.now(timezone.utc),
+            workspace=_workspace_id(),
         )
 
     def _evict(self) -> None:
@@ -122,7 +206,7 @@ class AgentService:
         with self._lock:
             if session_id and _SESSION_ID.match(session_id):
                 existing = self._sessions.get(session_id)
-                if existing is not None:
+                if existing is not None and existing.workspace == _workspace_id():
                     existing.last_used = datetime.now(timezone.utc)
                     return existing
 
@@ -142,11 +226,18 @@ class AgentService:
 
     # --- the one call that runs a model -----------------------------------
 
-    def chat(self, message: str, session_id: str | None = None) -> dict:
+    def chat(
+        self,
+        message: str,
+        session_id: str | None = None,
+        on_event: Callable[[dict], None] | None = None,
+    ) -> dict:
         """Run one turn and report what the agent actually did.
 
         Returns the reply plus the tool calls it made, so the UI can show the
-        work rather than only the conclusion.
+        work rather than only the conclusion. With `on_event`, each model call
+        and tool call is also reported the moment it starts and ends -- these
+        are the tracer's hook events, not a simulation of progress.
         """
         if not message or not message.strip():
             raise ValueError("message cannot be empty")
@@ -155,21 +246,24 @@ class AgentService:
         session = self.session(session_id)
 
         session.tracer.reset()
+        session.tracer.listener = on_event
+        if on_event is not None:
+            on_event({"type": "turn_start", "session_id": session.session_id})
         started = datetime.now(timezone.utc)
-        result = session.agent(message)
+        try:
+            result = session.agent(message)
+        except Exception as exc:
+            log.exception("agent turn failed")
+            raise AgentFailed(
+                explain_failure(exc, provider_status()),
+                _trace(session.tracer.calls),
+            ) from exc
+        finally:
+            session.tracer.listener = None
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
 
         reply = str(result).strip()
-        tool_calls = [
-            {
-                "tool": call.name,
-                "arguments": call.arguments,
-                "status": call.status,
-                "error": call.error,
-                "duration_seconds": call.duration_seconds,
-            }
-            for call in session.tracer.calls
-        ]
+        tool_calls = _trace(session.tracer.calls)
 
         session.turns += 1
         session.last_used = datetime.now(timezone.utc)
@@ -189,7 +283,52 @@ class AgentService:
             "tool_calls": tool_calls,
             "turn": session.turns,
             "elapsed_seconds": round(elapsed, 3),
+            "result_card": result_card(session.tracer.calls),
         }
+
+
+def _trace(calls: list[ToolCall]) -> list[dict]:
+    return [
+        {
+            "tool": call.name,
+            "arguments": call.arguments,
+            "status": call.status,
+            "error": call.error,
+            "duration_seconds": call.duration_seconds,
+        }
+        for call in calls
+    ]
+
+
+def result_card(calls: list[ToolCall]) -> dict | None:
+    """The record a turn produced, read from the tool's result, not the reply.
+
+    The reply is the model's prose about what happened; this is what actually
+    happened. Rendering the card from the tool result means the figures a user
+    checks at a glance -- amount, invoice, balance left -- cannot be a figure
+    the model misremembered. A refused or failed call produces no card.
+    """
+    for call in reversed(calls):
+        result = call.result if isinstance(call.result, dict) else None
+        if call.error or not result:
+            continue
+        status = result.get("status")
+        if call.name == "record_payment" and status == "recorded":
+            return scrub(
+                {"type": "payment", "payment": result["payment"], "invoice": result["invoice"]}
+            )
+        if call.name == "create_invoice" and status == "created":
+            return scrub({"type": "invoice", "invoice": result["invoice"]})
+        if call.name == "create_payment_reminder" and status == "prepared":
+            return scrub({"type": "reminder", "reminder": result["reminder"]})
+    return None
+
+
+def _workspace_id() -> str | None:
+    from app import workspaces
+
+    workspace = workspaces.current()
+    return workspace.id if workspace else None
 
 
 def _now() -> str:
