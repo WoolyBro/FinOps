@@ -94,3 +94,96 @@ def test_the_api_returns_502_with_the_trace(monkeypatch, tmp_path):
     assert body["error"] == "agent_failed"
     assert "model access" in body["detail"]
     assert body["result"]["tool_calls"][0]["tool"] == "record_payment"
+
+
+# --- replies never carry server paths ----------------------------------------------
+
+
+class ChattyAgent:
+    """Succeeds, but repeats the file paths it read in a tool result."""
+
+    def __init__(self, tracer):
+        self.tracer = tracer
+
+    def __call__(self, message):
+        return (
+            r"Recorded. Invoice PDF updated at `C:\Users\someone\data\invoices\FF-0005.pdf` "
+            "and receipt at /home/someone/app/data/receipts/RC-0001.pdf."
+        )
+
+
+def test_a_reply_that_repeats_a_server_path_is_redacted(monkeypatch):
+    status = {"available": True, "provider": "gemini", "model_id": "gemini-3.5-flash-lite",
+              "region": None, "detail": None}
+    monkeypatch.setattr(module, "provider_status", lambda: status)
+    monkeypatch.setattr(module, "build_agent", lambda tracer, **_: ChattyAgent(tracer))
+
+    reply = AgentService().chat("Rahul paid me 15k")["reply"]
+    assert "someone" not in reply
+    assert "C:\\" not in reply
+    assert "/home/" not in reply
+    assert reply.startswith("Recorded.")
+
+
+def test_the_prompt_no_longer_asks_for_file_locations():
+    from app.agent import system_prompt
+
+    prompt = system_prompt()
+    assert "where it was saved" not in prompt
+    assert "Never mention a\n   file path" in prompt
+
+
+# --- the payment card shows the receipt issued in the same turn ---------------------
+
+
+def _recorded(payment_id=7):
+    return ToolCall(
+        name="record_payment",
+        arguments={"invoice_id": 5, "amount_minor": 1_500_000},
+        result={
+            "status": "recorded",
+            "payment": {"payment_id": payment_id, "receipt_number": None,
+                        "invoice_amount_display": "₹40,000.00",
+                        "paid_to_date_display": "₹15,000.00",
+                        "outstanding_after_display": "₹25,000.00"},
+            "invoice": {"invoice_id": 5, "invoice_number": "FF-0005"},
+        },
+    )
+
+
+def test_a_receipt_issued_later_in_the_turn_appears_on_the_card():
+    from app.services.agent_service import result_card
+
+    receipt = ToolCall(
+        name="generate_receipt",
+        arguments={"payment_id": 7},
+        result={"status": "created", "receipt_number": "RC-0001", "receipt_path": "/tmp/x.pdf"},
+    )
+    card = result_card([_recorded(), receipt])
+    assert card["type"] == "payment"
+    assert card["payment"]["receipt_number"] == "RC-0001"
+    assert card["payment"]["invoice_amount_display"] == "₹40,000.00"
+    assert card["payment"]["outstanding_after_display"] == "₹25,000.00"
+
+
+def test_a_receipt_for_a_different_payment_is_not_borrowed():
+    from app.services.agent_service import result_card
+
+    other = ToolCall(
+        name="generate_receipt",
+        arguments={"payment_id": 99},
+        result={"status": "created", "receipt_number": "RC-0042"},
+    )
+    card = result_card([_recorded(), other])
+    assert card["payment"]["receipt_number"] is None
+
+
+def test_a_failed_receipt_is_not_shown():
+    from app.services.agent_service import result_card
+
+    failed = ToolCall(
+        name="generate_receipt",
+        arguments={"payment_id": 7},
+        result={"status": "error", "receipt_number": "RC-0001"},
+    )
+    assert result_card([_recorded(), failed])["payment"]["receipt_number"] is None

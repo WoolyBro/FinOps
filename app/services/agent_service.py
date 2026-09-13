@@ -262,7 +262,10 @@ class AgentService:
             session.tracer.listener = None
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
 
-        reply = str(result).strip()
+        # The model reads tool results that carry server paths, and can repeat
+        # them. The prompt forbids it; this makes sure a lapse never reaches a
+        # browser, a screen recording, or someone else's username on camera.
+        reply = redact_paths(str(result).strip())
         tool_calls = _trace(session.tracer.calls)
 
         session.turns += 1
@@ -314,13 +317,31 @@ def result_card(calls: list[ToolCall]) -> dict | None:
             continue
         status = result.get("status")
         if call.name == "record_payment" and status == "recorded":
-            return scrub(
-                {"type": "payment", "payment": result["payment"], "invoice": result["invoice"]}
-            )
+            payment = dict(result["payment"])
+            # A receipt issued later in the same turn belongs on the card: the
+            # payment snapshot above was taken before generate_receipt ran.
+            if not payment.get("receipt_number"):
+                payment["receipt_number"] = _receipt_issued_for(calls, payment["payment_id"])
+            return scrub({"type": "payment", "payment": payment, "invoice": result["invoice"]})
         if call.name == "create_invoice" and status == "created":
             return scrub({"type": "invoice", "invoice": result["invoice"]})
         if call.name == "create_payment_reminder" and status == "prepared":
             return scrub({"type": "reminder", "reminder": result["reminder"]})
+    return None
+
+
+def _receipt_issued_for(calls: list[ToolCall], payment_id: int) -> str | None:
+    """The receipt number a successful generate_receipt call returned, if any."""
+    for call in calls:
+        result = call.result if isinstance(call.result, dict) else None
+        if (
+            call.name == "generate_receipt"
+            and not call.error
+            and result
+            and result.get("status") in ("created", "already_exists")
+            and call.arguments.get("payment_id") == payment_id
+        ):
+            return result.get("receipt_number")
     return None
 
 

@@ -44,7 +44,7 @@ from app.aws_config import RegionNotConfigured, require_region, resolve_region
 # apac.amazon.nova-pro-v1:0 is the cross-region inference profile that serves
 # ap-south-1 (Mumbai) and the rest of AWS's Asia-Pacific grouping.
 BEDROCK_MODEL_ID = "apac.amazon.nova-pro-v1:0"
-GEMINI_MODEL_ID = "gemini-3.6-flash"
+GEMINI_MODEL_ID = "gemini-3.5-flash-lite"
 OLLAMA_MODEL_ID = "llama3.1"
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
 

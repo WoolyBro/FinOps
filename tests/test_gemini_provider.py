@@ -85,7 +85,7 @@ def test_status_with_a_key(monkeypatch):
     assert status == {
         "available": True,
         "provider": "gemini",
-        "model_id": "gemini-3.6-flash",
+        "model_id": "gemini-3.5-flash-lite",
         "region": None,
         "detail": None,
     }
@@ -112,7 +112,7 @@ def test_builds_a_gemini_model_with_the_key(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", FAKE_KEY)
     model = model_provider.build_model()
     assert isinstance(model, GeminiModel)
-    assert model.get_config()["model_id"] == "gemini-3.6-flash"
+    assert model.get_config()["model_id"] == "gemini-3.5-flash-lite"
     assert model.client_args["api_key"] == FAKE_KEY
 
 
@@ -152,10 +152,10 @@ def test_preflight_passes_with_a_key(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", FAKE_KEY)
     report = preflight(require_provider="gemini")
     assert report.ok, report.format()
-    assert report.model_id == "gemini-3.6-flash"
+    assert report.model_id == "gemini-3.5-flash-lite"
 
 
-GEMINI = {"provider": "gemini", "model_id": "gemini-3.6-flash"}
+GEMINI = {"provider": "gemini", "model_id": "gemini-3.5-flash-lite"}
 
 
 def test_a_rejected_key_is_named():
