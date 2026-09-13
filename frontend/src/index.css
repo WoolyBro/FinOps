@@ -1,0 +1,429 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #f6f9fc;
+  --surface: #ffffff;
+  --surface-sunken: #f7fafc;
+  --ink: #0a2540;
+  --ink-strong: #1a1f36;
+  --ink-body: #3c4257;
+  --ink-muted: #697386;
+  --ink-faint: #8792a2;
+  --line: #e3e8ee;
+  --line-strong: #d5dbe1;
+  --accent: #635bff;
+  --accent-hover: #7a73ff;
+  --accent-ink: #3f37d6;
+  --accent-wash: #f0efff;
+  --accent-bg: var(--accent-wash);
+  --accent-line: #d8d4fe;
+  
+  --ok-bg: #cbf4c9;
+  --ok-ink: #0e6245;
+  --ok-line: #a3e6b0;
+  --warn-bg: #fcedb9;
+  --warn-ink: #983705;
+  --warn-line: #f2d894;
+  --bad-bg: #fde2dd;
+  --bad-ink: #a41c4e;
+  --bad-line: #f7c4bb;
+  --neutral-bg: #e3e8ee;
+  --neutral-ink: #3c4257;
+
+  --shadow-xs: 0 1px 1px rgba(10, 37, 64, 0.04);
+  --shadow-sm: 0 1px 3px rgba(50, 50, 93, 0.08), 0 1px 2px rgba(10, 37, 64, 0.04);
+  --shadow-md: 0 4px 12px rgba(50, 50, 93, 0.10), 0 1px 3px rgba(10, 37, 64, 0.06);
+  --shadow-lg: 0 15px 35px rgba(50, 50, 93, 0.12), 0 5px 15px rgba(10, 37, 64, 0.08);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Durations — short. Anything over 320ms feels sluggish in a dense tool. */
+  --dur-instant: 80ms;
+  --dur-fast:    140ms;
+  --dur-base:    200ms;
+  --dur-slow:    300ms;
+
+  /* Easings */
+  --ease-out:    cubic-bezier(0.16, 1, 0.30, 1);   /* entrances — fast start, soft landing */
+  --ease-in:     cubic-bezier(0.55, 0, 1, 0.45);   /* exits */
+  --ease-move:   cubic-bezier(0.65, 0, 0.35, 1);   /* something moving between two places */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--canvas);
+  color: var(--ink-strong);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numbers for financial density */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Rupee symbol baseline correction per spec */
+.currency-symbol {
+  display: inline-block;
+  transform: translateY(-0.04em);
+  font-feature-settings: normal;
+}
+
+/* Custom selection */
+::selection {
+  background-color: var(--accent-wash);
+  color: var(--accent-ink);
+}
+
+/* Focus-visible everywhere */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Custom scrollbars: thin track in surface-sunken, thumb in line-strong */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-sunken);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
+
+/* Standard transitions: background and opacity only */
+.transition-standard {
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, color var(--dur-fast) ease, box-shadow var(--dur-fast) ease, opacity var(--dur-fast) ease;
+}
+
+/* Button active state: scale(0.98) at --dur-instant */
+button,
+[role="button"] {
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease, color var(--dur-fast) ease, box-shadow var(--dur-fast) ease, transform var(--dur-instant) var(--ease-out);
+}
+button:active:not(:disabled),
+[role="button"]:active:not([aria-disabled="true"]) {
+  transform: scale(0.98);
+}
+
+/* Table rows: hover background and action buttons fade at --dur-fast */
+.table-row {
+  transition: background-color var(--dur-fast) ease;
+}
+.row-actions {
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+.table-row:hover .row-actions,
+.table-row:focus-within .row-actions {
+  opacity: 1;
+}
+
+/* Route content entrance */
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.route-enter {
+  animation: route-enter var(--dur-base) var(--ease-out) forwards;
+}
+
+/* Table row entrance: first load only */
+@keyframes table-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.table-row-enter {
+  animation: table-row-enter var(--dur-base) var(--ease-out) backwards;
+}
+
+/* Modal animations */
+@keyframes backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes backdrop-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes modal-panel-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes modal-panel-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.modal-backdrop-enter {
+  animation: backdrop-enter var(--dur-fast) var(--ease-out) forwards;
+}
+.modal-backdrop-exit {
+  animation: backdrop-exit var(--dur-fast) var(--ease-in) forwards;
+}
+.modal-panel-enter {
+  animation: modal-panel-enter var(--dur-base) var(--ease-out) forwards;
+}
+.modal-panel-exit {
+  animation: modal-panel-exit var(--dur-fast) var(--ease-in) forwards;
+}
+
+/* Toast animations */
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes toast-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.toast-enter {
+  animation: toast-enter var(--dur-base) var(--ease-out) forwards;
+}
+.toast-exit {
+  animation: toast-exit var(--dur-fast) var(--ease-in) forwards;
+}
+
+/* Tool trace animations */
+@keyframes trace-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.trace-row-enter {
+  animation: trace-row-enter var(--dur-fast) var(--ease-out) forwards;
+}
+
+@keyframes inflight-dot-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.inflight-dot-pulse {
+  animation: inflight-dot-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes duration-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.duration-bar-grow {
+  transform-origin: left;
+  animation: duration-bar-grow var(--dur-slow) var(--ease-out) forwards;
+}
+
+/* Accordion collapse animation using grid-template-rows */
+.trace-accordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows var(--dur-base) var(--ease-move), opacity var(--dur-base) var(--ease-out);
+}
+.trace-accordion.expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.trace-accordion-inner {
+  overflow: hidden;
+}
+
+/* Payment progress bar animation */
+@keyframes progress-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: var(--target-scale, scaleX(1));
+  }
+}
+.progress-grow {
+  transform-origin: left;
+  animation: progress-grow var(--dur-slow) var(--ease-out) forwards;
+}
+
+/* Reports chart bar grow animation */
+@keyframes chart-bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+.chart-bar-grow {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: chart-bar-grow var(--dur-slow) var(--ease-out) forwards;
+}
+
+/* Optimistic write row flash */
+@keyframes optimistic-flash {
+  from {
+    background-color: var(--accent-wash);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.row-flash,
+.optimistic-flash {
+  animation: optimistic-flash var(--dur-slow) ease-out 1 forwards;
+}
+
+/* Button active state */
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.98);
+  transition: transform var(--dur-instant) ease-out;
+}
+
+/* Table row hover and actions button */
+.table-row {
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.table-row:hover {
+  background-color: var(--surface-sunken);
+}
+.table-row .row-actions {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.table-row:hover .row-actions,
+.table-row:focus-within .row-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .table-row .row-actions {
+    opacity: 1;
+  }
+}
+
+/* Skeleton breathe */
+@keyframes skeleton-breathe {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.skeleton-breathe {
+  animation: skeleton-breathe 1.6s ease-in-out infinite;
+}
+
+/* Print stylesheet */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 12pt;
+  }
+  aside,
+  [role="dialog"],
+  .print\:hidden,
+  .actions button,
+  .page-actions button,
+  .panel-actions button,
+  [class*="actions"] button {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  .border,
+  table,
+  th,
+  td {
+    border-color: #000000 !important;
+  }
+  * {
+    box-shadow: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--dur-instant) !important;
+    transition-property: opacity, background-color, color, border-color !important;
+    scroll-behavior: auto !important;
+  }
+
+  .inflight-dot-pulse,
+  .duration-bar-grow,
+  .progress-grow,
+  .chart-bar-grow {
+    animation: none !important;
+    transform: none !important;
+  }
+}

@@ -1,10 +1,10 @@
 # Deploying FreelanceFlow to Amazon Bedrock AgentCore
 
 The agent runs on AgentCore Runtime; the dashboard and its API stay where they
-are. Nothing about the 21 business tools changed for this.
+are. Nothing about the 22 business tools changed for this.
 
 ```
-Browser -> Next.js -> FastAPI -> AgentService ─┬─ local: Strands -> Bedrock
+Browser -> React (Vite) -> FastAPI -> AgentService ─┬─ local: Strands -> Bedrock
                                                └─ deployed: InvokeAgentRuntime
                                                             -> AgentCore Runtime
                                                             -> app/agentcore_app.py

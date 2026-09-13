@@ -21,6 +21,8 @@ import sqlite3
 from contextlib import contextmanager
 from collections.abc import Iterator
 
+from app import workspaces
+from app import workspaces
 from app.config import DB_PATH, ensure_dirs
 
 SCHEMA = """
@@ -98,9 +100,12 @@ def normalise_name(name: str) -> str:
 
 
 def connect(db_path=None) -> sqlite3.Connection:
-    """Open a connection with sane defaults for this app."""
+    """Open a connection with sane defaults for this app.
+
+    Precedence: an explicit path, then the request's workspace, then DB_PATH.
+    """
     ensure_dirs()
-    conn = sqlite3.connect(str(db_path or DB_PATH))
+    conn = sqlite3.connect(str(db_path or workspaces.db_path() or DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

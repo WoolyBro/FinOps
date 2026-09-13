@@ -1,0 +1,28 @@
+# Render Blueprint: one web service running the Dockerfile at the repo root.
+#
+# In Render: New -> Blueprint -> pick this repository. It will ask for
+# GEMINI_API_KEY (marked sync: false, so it is entered in Render's dashboard
+# and never stored in this file or the repository).
+services:
+  - type: web
+    name: freelanceflow
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FF_MODEL_PROVIDER
+        value: gemini
+      - key: FF_MODEL_ID
+        value: gemini-3.6-flash
+      - key: FF_GEMINI_THINKING
+        value: low
+      - key: FF_SEED_DEMO
+        value: "true"
+      - key: FF_BUSINESS_NAME
+        value: FreelanceFlow Demo
+      - key: FF_CURRENCY
+        value: INR

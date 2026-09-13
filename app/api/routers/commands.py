@@ -177,3 +177,12 @@ def approve_reminder(reminder_id: int) -> dict:
         return write_service.approve(reminder_id)
     except Rejected as exc:
         raise _rejected(exc) from exc
+
+
+@router.post("/reminders/{reminder_id}/cancel")
+def cancel_reminder(reminder_id: int) -> dict:
+    """Withdraw a reminder. It stays on record, marked CANCELLED."""
+    try:
+        return write_service.cancel(reminder_id)
+    except Rejected as exc:
+        raise _rejected(exc) from exc

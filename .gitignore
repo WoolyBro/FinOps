@@ -1,14 +1,19 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
-.env
-data/*.db
-data/documents/
-data/invoices/
-data/receipts/
 .pytest_cache/
 
+# Frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Local data: databases, generated PDFs, demo and workspace ledgers.
+data/
+
 # Never commit credentials or key material.
+.env
 .env.*
 !.env.example
 .aws/
@@ -16,3 +21,12 @@ data/receipts/
 *.key
 *.pfx
 credentials
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local tool configuration
+.claude/

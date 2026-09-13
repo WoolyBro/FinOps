@@ -1,6 +1,6 @@
 # The model runs on Amazon Bedrock (boto3 ships with strands-agents).
-# The ollama extra is the credential-free local development path.
-strands-agents[ollama]>=1.54
+# The gemini extra is the free-tier cloud path; ollama is the offline one.
+strands-agents[ollama,gemini]>=1.54
 strands-agents-tools>=0.8
 python-dotenv>=1.0
 reportlab>=4.0

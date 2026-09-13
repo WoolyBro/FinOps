@@ -105,8 +105,8 @@ def test_the_module_never_reads_the_anthropic_key():
     assert "strands.models.anthropic" not in source
 
 
-def test_supported_providers_are_exactly_bedrock_and_ollama():
-    assert model_provider.PROVIDERS == ("bedrock", "ollama")
+def test_supported_providers_are_exactly_bedrock_gemini_and_ollama():
+    assert model_provider.PROVIDERS == ("bedrock", "gemini", "ollama")
 
 
 # --- explicit selection -----------------------------------------------------

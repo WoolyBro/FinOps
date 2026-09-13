@@ -23,9 +23,10 @@ from dataclasses import dataclass, field
 
 from app.aws_config import region_status
 from app.model_provider import (
-    BEDROCK_MODEL_ID,
+    DEFAULT_MODEL_IDS,
+    GEMINI_KEY_HELP,
     ModelNotConfigured,
-    OLLAMA_MODEL_ID,
+    gemini_api_key,
     resolve_provider,
 )
 
@@ -103,6 +104,16 @@ def preflight(require_provider: str = "bedrock") -> PreflightReport:
             )
         )
 
+    if require_provider == "gemini":
+        report.checks.append(
+            Check(
+                "gemini api key",
+                gemini_api_key() is not None,
+                "GEMINI_API_KEY is set" if gemini_api_key() else "GEMINI_API_KEY is not set",
+                fix=GEMINI_KEY_HELP,
+            )
+        )
+
     # 2. Region, explicitly configured.
     region = region_status()
     report.region = region["region"]
@@ -135,8 +146,8 @@ def preflight(require_provider: str = "bedrock") -> PreflightReport:
                 + ("" if matches else f", but this run requires {require_provider!r}"),
                 fix=(
                     f"export FF_MODEL_PROVIDER={require_provider}\n"
-                    "A Bedrock validation run must not silently execute against\n"
-                    "a different provider -- a pass from the wrong model proves\n"
+                    "A validation run must not silently execute against a\n"
+                    "different provider -- a pass from the wrong model proves\n"
                     "nothing."
                 ),
             )
@@ -146,8 +157,8 @@ def preflight(require_provider: str = "bedrock") -> PreflightReport:
             Check("provider resolves", False, str(exc).splitlines()[0], fix=str(exc))
         )
 
-    report.model_id = os.getenv("FF_MODEL_ID") or (
-        BEDROCK_MODEL_ID if require_provider == "bedrock" else OLLAMA_MODEL_ID
+    report.model_id = os.getenv("FF_MODEL_ID") or DEFAULT_MODEL_IDS.get(
+        require_provider, DEFAULT_MODEL_IDS["bedrock"]
     )
 
     # 4. The Anthropic API is not a path this project has.
@@ -156,8 +167,8 @@ def preflight(require_provider: str = "bedrock") -> PreflightReport:
         Check(
             "anthropic api not used",
             True,
-            "ANTHROPIC_API_KEY is set but is never read; Bedrock is the only "
-            "cloud path"
+            "ANTHROPIC_API_KEY is set but is never read; Anthropic is not a "
+            "supported provider"
             if key_present
             else "no ANTHROPIC_API_KEY, and nothing reads one",
         )

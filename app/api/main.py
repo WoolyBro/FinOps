@@ -1,6 +1,6 @@
 """The FastAPI application.
 
-    Browser -> Next.js -> FastAPI -> AgentService -> Strands -> tools -> SQLite
+    Browser -> React (Vite) -> FastAPI -> AgentService -> Strands -> tools -> SQLite
 
 The frontend never talks to Strands. It talks to this, which talks to the
 service layer. That boundary is what keeps an AgentCore deployment a change to
@@ -9,21 +9,27 @@ one service rather than a rewrite of the interface.
 
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.middleware import WorkspaceMiddleware
 from app.api.responses import UTF8JSONResponse
-from app.api.routers import chat, commands, records, reports
+from app.api.routers import chat, commands, records, reports, workspaces
 from app.database import init_db
 
 API_PREFIX = "/api"
 
 DEFAULT_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
@@ -56,10 +62,33 @@ def cors_origins() -> list[str]:
     return origins
 
 
+log = logging.getLogger("freelanceflow.api")
+
+TRUE_VALUES = ("1", "true", "yes", "on")
+
+
+def static_dir() -> Path | None:
+    """The built dashboard, if there is one to serve.
+
+    In a deployment the API serves the dashboard from the same origin, so a
+    judge opens one URL and the browser never makes a cross-origin call. In
+    development Vite serves it instead and this finds nothing.
+    """
+    configured = os.getenv("FF_STATIC_DIR")
+    directory = Path(configured) if configured else Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    return directory if (directory / "index.html").is_file() else None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Safe to run repeatedly; makes a fresh checkout serve immediately.
     init_db()
+    if os.getenv("FF_SEED_DEMO", "").strip().lower() in TRUE_VALUES:
+        from app.seed import seed_if_empty
+
+        seeded = seed_if_empty()
+        if seeded:
+            log.info("seeded demo ledger: %s", seeded)
     yield
 
 
@@ -75,11 +104,21 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Added first so it sits inside CORS: a preflight is answered before any
+    # workspace is opened, and a 400 for an unknown workspace still carries
+    # the CORS headers the browser needs to read it.
+    app.add_middleware(WorkspaceMiddleware)
+    # Added first so it sits inside CORS: a preflight is answered before any
+    # workspace is opened, and a 400 for an unknown workspace still carries
+    # the CORS headers the browser needs to read it.
+    app.add_middleware(WorkspaceMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins(),
         allow_credentials=True,
-        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        # PATCH is the client-edit endpoint; leaving it out made the browser's
+        # preflight refuse every inline edit on the client page.
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -87,12 +126,20 @@ def create_app() -> FastAPI:
     app.include_router(commands.router, prefix=API_PREFIX)
     app.include_router(records.router, prefix=API_PREFIX)
     app.include_router(reports.router, prefix=API_PREFIX)
+    app.include_router(workspaces.router, prefix=API_PREFIX)
 
     _install_error_handlers(app)
 
     @app.get("/api/health", tags=["meta"])
     def health() -> dict:
         return {"status": "ok", "service": "freelanceflow"}
+
+    # Mounted last, so /api and /docs always win. The dashboard uses hash
+    # routes (#/invoices), so the server only ever needs to serve index.html
+    # and the built assets.
+    dashboard = static_dir()
+    if dashboard is not None:
+        app.mount("/", StaticFiles(directory=dashboard, html=True), name="dashboard")
 
     return app
 
