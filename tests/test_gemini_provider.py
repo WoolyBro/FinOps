@@ -184,3 +184,26 @@ def test_a_retired_model_is_named_as_retired():
 def test_an_unknown_gemini_error_does_not_leak_its_text():
     detail = explain_failure(RuntimeError("secret-project-id-123 at C:\\keys"), GEMINI)
     assert "secret-project-id-123" not in detail
+
+
+def test_a_gemini_server_error_is_explained_as_temporary():
+    """Google's 5xx is not the user's fault; say so, and say to retry."""
+    from google.genai import errors
+
+    exc = errors.ServerError(503, {"error": {"code": 503, "message": "The model is overloaded.", "status": "UNAVAILABLE"}})
+    detail = explain_failure(exc, GEMINI)
+    assert "temporary error" in detail
+    assert "Google's side" in detail
+    assert "overloaded" not in detail  # raw provider text stays in the log
+
+
+def test_a_wrapped_server_error_is_still_recognised():
+    from google.genai import errors
+
+    try:
+        try:
+            raise errors.ServerError(500, {"error": {"code": 500, "message": "internal", "status": "INTERNAL"}})
+        except errors.ServerError as inner:
+            raise RuntimeError("event loop failed") from inner
+    except RuntimeError as outer:
+        assert "temporary error" in explain_failure(outer, GEMINI)

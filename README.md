@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Strands Agents](https://img.shields.io/badge/Strands%20Agents-1.54-orange)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Tests](https://img.shields.io/badge/tests-590%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-595%20passing-brightgreen)
 
 You tell it what happened, in your own words:
 
@@ -378,13 +378,13 @@ deploy/
   iam/                  least-privilege IAM policies
 docs/
   AGENTCORE.md          deployment guide and storage limitations
-tests/                  590 offline tests + opt-in live-model tests
+tests/                  595 offline tests + opt-in live-model tests
 ```
 
 ## Testing
 
 ```bash
-pytest -q          # 590 tests. No credentials, no network, no spend.
+pytest -q          # 595 tests. No credentials, no network, no spend.
 ```
 
 The suite covers money parsing and formatting, invoice numbering, payment and
@@ -497,7 +497,7 @@ SQLite or Postgres).
 
 **Working today**
 
-- The full deterministic business layer: 22 tools, 590 passing tests
+- The full deterministic business layer: 22 tools, 595 passing tests
 - The dashboard, all ten screens wired to the live API with no mock data
 - The agent running live on Google Gemini through Strands, verified end to end: a read question produced the correct tool chain (`find_client → get_client_balance`) and the correct balance
 - Invoice and receipt PDFs
