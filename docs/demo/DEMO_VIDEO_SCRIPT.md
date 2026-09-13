@@ -180,7 +180,7 @@ Open the **receipt** for that payment.
 
 ### 4:15–4:30 · Trust *(slide 6)*
 
-> "It's built to be trusted: five hundred and ninety-three automated tests,
+> "It's built to be trusted: five hundred and ninety-five automated tests,
 > balances derived from the payment ledger rather than stored, overpayments
 > refused, duplicates flagged, and server details kept out of the browser."
 

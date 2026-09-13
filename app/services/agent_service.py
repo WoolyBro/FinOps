@@ -73,6 +73,21 @@ def _is_connection_failure(exc: BaseException) -> bool:
     return False
 
 
+def _error_text(exc: BaseException) -> str:
+    """Type names and messages down the cause chain.
+
+    Strands can wrap a provider error (EventLoopException from ServerError),
+    and the useful status code is on the inner one.
+    """
+    parts = []
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        parts.append(f"{type(exc).__name__} {exc}")
+        exc = exc.__cause__ or exc.__context__
+    return " | ".join(parts)
+
+
 def explain_failure(exc: BaseException, status: dict) -> str:
     """A browser-safe, actionable account of why the model call failed.
 
@@ -84,7 +99,20 @@ def explain_failure(exc: BaseException, status: dict) -> str:
     model = status.get("model_id") or "the model"
 
     if provider == "gemini":
-        text = f"{type(exc).__name__} {exc}"
+        text = _error_text(exc)
+        if (
+            "ServerError" in text
+            or "UNAVAILABLE" in text
+            or "INTERNAL" in text
+            or "overloaded" in text.lower()
+            or " 500 " in text
+            or " 503 " in text
+        ):
+            return (
+                f"Google's Gemini service returned a temporary error for {model}. "
+                "This is on Google's side, not in your data or key -- try the "
+                "message again in a few seconds."
+            )
         if "API_KEY_INVALID" in text or "API key not valid" in text:
             return (
                 "Google rejected the Gemini API key. Check GEMINI_API_KEY in "
