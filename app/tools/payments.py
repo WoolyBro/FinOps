@@ -85,8 +85,10 @@ def record_payment(
         invoice_id: Numeric id of the invoice, from get_invoice or find_client.
         amount_minor: Amount received, in paise/cents. Positive integer.
         payment_date: YYYY-MM-DD. Defaults to today.
-        method: How it arrived, e.g. "UPI", "bank transfer", "cash".
-        reference: Transaction reference or cheque number, if there is one.
+        method: How it arrived -- "UPI", "NEFT", "cash" -- only if the user
+            said so. Omit it otherwise; do not guess.
+        reference: Transaction reference or cheque number, only if the user
+            gave one.
         allow_duplicate: Only set this to true after the user has confirmed a
             second identical payment really did arrive.
 

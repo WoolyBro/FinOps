@@ -1,28 +1,39 @@
-# FreelanceFlow: demo video script (target 4:30, hard limit 5:00)
+# FreelanceFlow: demo video script
 
-The video covers what the submission requires: a **working demo**, plus a pitch
-on **the problem**, **who it's for** and **why it matters**. Voiceover over
-slides and screen recording; you don't need to appear on camera.
+**Runtime:** about 4:40 (hard limit 5:00) · **Voiceover:** about 560 words · **Format:** voiceover over slides and screen recording
 
-Every agent message in this script was **rehearsed live** against the demo
-ledger on `gemini-3.5-flash-lite`, and each produced the tool chain and result
-shown below. Don't improvise new agent prompts on camera. Use these.
+## What the judges must hear, and where
+
+| Requirement | Where it happens |
+|---|---|
+| The problem | Scene 2 (0:15) |
+| Who it's for | Scene 3 (0:45) |
+| Why it matters | Scene 4 (1:05) |
+| A working version | Scenes 5–9 (1:30–3:45): four live agent actions |
+| How it's built (Strands) | Scene 10 (3:45) |
+
+## The story in one line
+
+Aditi, a freelancer, tells FreelanceFlow what happened. The agent records a
+payment, refuses a mistake, chases the balance and bills a new client. It
+shows every step, and it never invents a number.
+
+*(Aditi is an illustrative user. Rahul, Meera and the invoices are the demo
+ledger's sample data.)*
 
 ---
 
-## Before you record (10 minutes)
+## Part 1 · Prepare (10 minutes, once)
 
-### 1. Start the app on the clean recording ledger
-
-A fresh ledger for recording is already seeded at `data/video`. To **reset it
-before every take** (so Rahul's ₹40,000 invoice is unpaid again), run this from
-the `freelanceflow` folder:
+**1. Reset the demo data before every take.** This makes Rahul's ₹40,000
+invoice unpaid again. Run it from the `freelanceflow` folder, with the API
+window closed:
 
 ```bash
 Remove-Item -Recurse -Force data\video; .venv\Scripts\python.exe -m app.seed --data-dir data/video
 ```
 
-Then start the two servers, each in its own PowerShell window:
+**2. Start the app**, each command in its own PowerShell window:
 
 ```bash
 $env:FF_DATA_DIR="data/video"; .venv\Scripts\python.exe -m uvicorn app.api.main:app --port 8000
@@ -32,182 +43,196 @@ $env:FF_DATA_DIR="data/video"; .venv\Scripts\python.exe -m uvicorn app.api.main:
 cd frontend; npm run dev
 ```
 
-Open **http://localhost:5173**. The sidebar must say **Agent ready · Google
-Gemini · gemini-3.5-flash-lite**.
+Open **http://localhost:5173**. The bottom of the sidebar must say **Agent
+ready · Google Gemini · gemini-3.5-flash-lite**.
 
-### 2. Make the screen camera-ready
+**3. Make the screen clean.**
+- Chrome or Edge, full screen (F11), zoom 110%, one tab, bookmarks bar hidden.
+- Windows notifications off (Focus assist → Alarms only).
+- Open `docs/demo/slides.html` in a second full-screen window. The arrow keys change slides.
+- No terminal, `.env` file or API key anywhere on screen.
 
-- Browser full screen (F11), zoom **110%** (Ctrl +), bookmarks bar hidden, no other tabs.
-- Close notifications: Windows **Focus assist → Alarms only**.
-- Open `docs/demo/slides.html` in a **second** full-screen browser window. Use the arrow keys to move between slides.
+**4. Respect the free tier.** Gemini's free tier limits requests per
+minute. **Wait about 30 seconds after each agent reply before typing the
+next message**, then cut the waiting in editing. If the page ever says
+*"free-tier limit reached"*, wait a minute, reset the data and restart the take.
 
-### 3. Mind the free-tier limit
-
-Gemini's free tier limits requests **per minute**. The payment turn alone
-makes about 5 model calls. **Leave about 30–60 seconds between agent
-messages.** Trim the gap out when editing. If the Agent page ever says *"free-tier
-limit reached"*, stop, wait a minute, reset the ledger and redo the take.
-Your limits are listed at https://ai.dev/rate-limit.
-
-### 4. Recording tool (free)
-
-- **Clipchamp**, built into Windows 11: *Record & create → Screen and camera*, pick the browser window, microphone on. It also does the trimming.
-- Or **OBS Studio** (free) if you prefer.
-
-Record the **demo section in one continuous take**, then the **slide sections
-separately**, and join them in Clipchamp. Agent replies take roughly 7–15
-seconds. You may **speed up or cut the waiting**, but never cut in a result
-from a different take.
+**5. Record with Clipchamp** (built into Windows 11): *Record & create →
+Screen and camera*, choose the browser window, microphone on.
+- Record **Scenes 5–9 as one continuous take** (the live demo).
+- Record the slide scenes separately, then join everything in Clipchamp.
+- You may cut or speed up waiting. Never paste in a result from a different take.
 
 ---
 
-## The script
+## Part 2 · The script
 
-Timings are targets. Voiceover lines are written to be read at a natural
-pace, roughly 150 words a minute.
+Each scene lists **what's on screen**, **what you do**, and **what you say**.
+Speak at a relaxed pace. The timings leave room for it.
 
-### 0:00–0:15 · Cold open *(screen: Agent page)*
+### Scene 1 · Hook · 0:00–0:15
+**Screen:** the first 12 seconds of your demo take (Scene 6, the payment), reused as a teaser. Same take, same result, so no reset is needed.
 
-**On screen:** type **`Rahul paid me ₹15,000 today`** and press Enter. Let the
-trace appear, then the result card.
+> "*Rahul paid me fifteen thousand rupees today.* One sentence. The payment is
+> recorded, the invoice is updated, a receipt is issued, and you can see every
+> step the AI took to do it. This is **FreelanceFlow**."
 
-> **Voiceover:** "Rahul paid me fifteen thousand rupees today. That's all I
-> typed. The agent found the client, found the right invoice and recorded the
-> payment. And it showed its work."
+### Scene 2 · The problem · 0:15–0:45
+**Screen:** slide 2
 
-*(If you record the cold open separately, reset the ledger before the main
-demo take, so the payment happens again in the demo.)*
+> "Meet Aditi, a freelance designer. She's great at design, but every month
+> she's also her own accounts department. She raises invoices, matches every
+> UPI transfer to the right invoice, and chases the clients who are late. It
+> all lives across a spreadsheet, WhatsApp and a banking app. The work is small
+> but it never stops, and one mistake, like chasing a client who has already
+> paid, costs her time, money and trust."
 
-### 0:15–0:45 · The problem *(slide 2)*
+### Scene 3 · Who it's for · 0:45–1:05
+**Screen:** slide 3
 
-> "Every independent freelancer is also their own accounts department. You
-> raise invoices, chase late payments, match each bank transfer to the right
-> invoice and keep receipts, usually across a spreadsheet, WhatsApp and a
-> banking app. The work is small but constant, and the mistakes are
-> expensive: a payment logged against the wrong invoice, a reminder sent for
-> money that already arrived, a balance nobody trusts anymore."
+> "FreelanceFlow is for people like Aditi: independent freelancers and small
+> studios, designers, developers, writers and consultants, who bill a handful of
+> clients and don't have a bookkeeper. We built it for India first: rupees
+> and lakhs, Indian number formatting, UPI and NEFT."
 
-### 0:45–1:05 · Who it's for *(slide 3)*
+### Scene 4 · Why it matters · 1:05–1:30
+**Screen:** slide 4
 
-> "FreelanceFlow is for independent freelancers and very small studios:
-> designers, developers, writers, consultants. They bill a handful of clients
-> each month and don't have a bookkeeper. We built it for freelancers in India
-> first: amounts in rupees, lakhs, Indian digit grouping, and UPI and NEFT
-> payments."
+> "Late or mismatched payments hit a freelancer's cash flow directly. AI
+> could take this work off her hands, but today's assistants can't be trusted
+> with a ledger: they'll confidently state a balance they never looked up. So
+> FreelanceFlow is built on one rule. The AI decides *what* to do.
+> Deterministic code does everything that touches money."
 
-### 1:05–1:30 · Why it matters *(slide 4)*
+### Scene 5 · The dashboard · 1:30–1:45  ▶ *start the continuous demo take*
+**Screen:** Overview page.
+**Do:** move the cursor across the top tiles, then to Rahul's FF-0005 row in *Needs attention*.
 
-> "AI assistants can talk about your finances, but you can't trust them to
-> keep your books. A language model will confidently give you a balance it
-> never looked up. So we built FreelanceFlow around one rule: the AI decides
-> what to do, and deterministic code does everything that touches money. It
-> never invents a client, an invoice number or a rupee."
+> "This is Aditi's dashboard, live. Every figure is calculated on the server
+> from the ledger. Rahul's invoice, FF-0005, forty thousand rupees, is overdue
+> and unpaid."
 
-### 1:30–3:40 · Live demo *(screen recording, one take)*
+### Scene 6 · Record a payment by talking · 1:45–2:30
+**Do:** click **Agent**. Type exactly:
 
-**1:30 · Overview.** Point the cursor at the tiles and the *Needs attention* panel.
+```
+Rahul paid me ₹15,000 today
+```
 
-> "This is the dashboard, running live. Everything here is computed on the
-> server from the ledger: outstanding money, what's overdue, what came in this
-> month. Rahul Sharma's invoice FF-0005, forty thousand rupees, is still
-> unpaid."
+Press Enter. While it works:
 
-**1:50 · Invoices → click FF-0005.** Show status *Unpaid*, ₹40,000 outstanding, no payments.
+> "She doesn't fill in a form. She just says what happened."
 
-> "Here's that invoice. Forty thousand outstanding, no payments yet."
+**When the reply appears:** move the cursor down the trace under the message. Click the `record_payment` row to open its arguments.
 
-**2:05 · Agent page.** Type **`Rahul paid me ₹15,000 today`** and press Enter.
-While it works:
+> "This trace is the Strands agent's real tool calls, not an animation. It
+> found Rahul, turned *fifteen thousand rupees* into an exact amount, matched
+> his open invoice and recorded the payment in a single database transaction."
 
-> "Now I just tell the agent what happened, the way I'd say it to a friend."
+**Do:** move the cursor to the payment card. Click **View receipt**, hold for two seconds, then close it.
 
-When the reply arrives, the **trace is already open** under your message.
-Move the cursor down its rows, and click one row (e.g. `record_payment`) to show its arguments:
+> "And this card comes straight from the payment tool's result, not the AI's
+> wording: forty thousand invoiced, fifteen thousand paid, twenty-five
+> thousand left. Plus a real receipt."
 
-> "Look at the trace. These are real tool executions, not a loading
-> animation. It found Rahul, parsed fifteen thousand rupees into an exact
-> number, looked up his open invoices, recorded the payment in a database
-> transaction and updated the invoice PDF. The tools themselves took a
-> fraction of a second. The rest is the model deciding what to do."
+*(Rehearsed live: `find_client → parse_amount → get_outstanding_invoices →
+record_payment → generate_invoice_pdf → generate_receipt`, about 15 seconds.
+The model sometimes skips the receipt step. If **View receipt** is there,
+the receipt is generated when you open it, so the scene still works. Describe
+what's on screen.)*
 
-Move the cursor to the **payment card**:
+### Scene 7 · Try to break it · 2:30–2:50
+**Do:** wait ~30 seconds (cut later). Type exactly:
 
-> "And this card isn't the AI's wording. It's built from what the payment
-> tool actually returned: invoice total forty thousand, fifteen thousand paid,
-> twenty-five thousand left on the invoice."
+```
+Record ₹99,000 more against that same invoice
+```
 
-*(In the browser rehearsal the chain was `find_client → parse_amount →
-get_outstanding_invoices → record_payment → generate_invoice_pdf`, 5 operations
-in 12.6 s; on another run it also called `generate_receipt`. The model can
-vary the order, and the trace shows whatever really ran, so describe what
-you see on screen.)*
+> "Now let's try to break it: ninety-nine thousand more, on an invoice with only twenty-five thousand left."
 
-**2:50 · Wait ~30–60s off camera, then type:** **`Record ₹99,000 more against that same invoice`**
+**When the reply appears:**
 
-> "Now let me try to break it. Ninety-nine thousand more, on an invoice with
-> only twenty-five thousand left."
+> "Refused. It quotes the real balance and writes nothing. The agent can't
+> claim success unless the tool says so."
 
-When the refusal appears:
+*(Rehearsed live: `parse_amount → record_payment → error`, about 8 seconds, no card.)*
 
-> "It refuses, quotes the real remaining balance, and writes nothing. The
-> payment tool rejected it, and the agent is not allowed to claim success
-> unless a tool says so."
+### Scene 8 · Chase the balance · 2:50–3:15
+**Do:** wait ~30 seconds (cut later). Type exactly:
 
-*(Rehearsed: `parse_amount → record_payment → error`, reply names ₹25,000.00 outstanding, no result card.)*
+```
+Draft a reminder for the balance Rahul still owes
+```
 
-**3:15 · Click "Open invoice" on the payment card.** Show *Partially paid*, ₹25,000 outstanding, the ₹15,000 payment in the history.
-Open the **receipt** for that payment.
+**When the reminder card appears:** point at the message text, then click **Review in Reminders**. Hover over **Approve**, but don't click it.
 
-> "Back on the invoice: partially paid, twenty-five thousand outstanding, and
-> the receipt is a real PDF, generated from the ledger, with Indian digit
-> grouping."
+> "It drafts the reminder from the invoice's own figures: the balance, the due
+> date, how many days late. And it's only a draft. Nothing goes to a client
+> until Aditi approves it."
 
-**3:30 · Overdue page** (brief).
+*(Rehearsed live: `create_payment_reminder → prepared`, about 6 seconds. The
+draft names FF-0005 and ₹25,000.00 outstanding.)*
 
-> "And everything the agent does, you can also do by hand: overdue
-> invoices, reminder drafts, reports. The dashboard and the agent use the same
-> tools, so there's no second, weaker path to your money."
+### Scene 9 · Bill a new job in plain words · 3:15–3:45  ▶ *end of the continuous take*
+**Do:** click **Agent**, wait ~30 seconds (cut later). Type exactly:
 
-### 3:40–4:15 · How it's built *(slide 5)*
+```
+Create an invoice for Meera for 85k for brand guidelines, due in 30 days
+```
 
-> "Under the hood, it's a Strands Agents SDK agent with twenty-two
-> deterministic Python tools for clients, invoices, payments, reports,
-> reminders and documents. A Strands hook records every tool call, which is
-> where that trace comes from. The model runs on Google Gemini, and the same
-> agent also runs on Amazon Bedrock or a local model without code changes.
-> FastAPI serves a React dashboard, and money is stored as integer paise, so
-> nothing ever rounds."
+**When the invoice card appears:** click **View PDF** and hold on the PDF for two seconds.
 
-### 4:15–4:30 · Trust *(slide 6)*
+> "Last one. *Eighty-five k* becomes exactly eighty-five thousand rupees. The
+> invoice number comes from the database, never from the model, and the PDF is
+> ready to send."
 
-> "It's built to be trusted: five hundred and ninety-five automated tests,
-> balances derived from the payment ledger rather than stored, overpayments
-> refused, duplicates flagged, and server details kept out of the browser."
+*(Rehearsed live: `find_client → parse_amount → create_invoice →
+generate_invoice_pdf`, about 10 seconds, creating FF-0011 for ₹85,000.00 due
+in 30 days.)*
 
-### 4:30–4:45 · Close *(slide 7)*
+> **Running long?** Cut Scene 9 first. The video still covers every requirement without it.
 
-> "FreelanceFlow. Tell it what happened, and it keeps your books straight,
-> without ever inventing a number. The code is open source, on GitHub."
+### Scene 10 · How it's built · 3:45–4:15
+**Screen:** slide 5
 
-**Stop. Total should land between 4:30 and 4:50.**
+> "Under the hood, it's an agent built with the **Strands Agents SDK**,
+> using twenty-two deterministic Python tools. A Strands hook records every tool
+> call, which is the trace you just saw. The model is Google Gemini, behind
+> one provider layer, so the same agent also runs on Amazon Bedrock or a local
+> model. FastAPI serves the React dashboard, and money is stored as integer
+> paise, so nothing ever rounds."
+
+### Scene 11 · Built to be trusted · 4:15–4:30
+**Screen:** slide 6
+
+> "Five hundred and ninety-six automated tests. Balances derived from the
+> payment ledger, never stored. Overpayments refused, duplicates flagged, and
+> nothing sent without approval."
+
+### Scene 12 · Close · 4:30–4:40
+**Screen:** slide 7
+
+> "FreelanceFlow. Freelancers say what happened, and their books stay right,
+> without the AI ever inventing a number. It's open source, on GitHub."
 
 ---
 
-## If something goes wrong during a take
+## Part 3 · If something goes wrong
 
-| What you see | Do this |
+| On screen | What to do |
 |---|---|
-| "free-tier limit reached" | Wait 60 seconds, reset the ledger, restart the take |
-| The agent asks "which invoice?" instead of recording | Answer it on camera ("FF-0005"). A clarifying question is correct behaviour and worth keeping |
-| A reply takes over 30 seconds | Keep recording; cut the wait in editing |
-| Sidebar says the agent is unavailable | The key isn't loaded: check `.env`, restart the API window |
-| Anything else | Reset the ledger and redo the take. Never splice results from different takes |
+| "free-tier limit reached" | Stop. Wait 60 seconds, reset the data, restart the take |
+| "temporary error… on Google's side" | Wait 10 seconds, send the same message again. If nothing was recorded, keep recording |
+| The agent asks a question ("Which invoice?") | Answer it on camera ("FF-0005"). Asking instead of guessing is the point, so keep it |
+| "Agent unavailable" in the sidebar | The key didn't load. Check `.env`, restart the API window |
+| A reply takes over 30 seconds | Keep recording, then cut the wait |
+| Anything else | Reset the data and redo the take |
 
-## Upload checklist
+## Part 4 · Before you upload
 
 - [ ] Under 5:00
-- [ ] Problem, who it's for and why it matters are all spoken (0:15–1:30)
-- [ ] The payment is shown happening live, with the trace visible
+- [ ] The problem, who it's for and why it matters are all spoken
+- [ ] The payment happens live with the trace visible
 - [ ] The refusal is shown
-- [ ] No API key, `.env` file or terminal with secrets visible on screen
-- [ ] Uploaded as public or unlisted (YouTube or Loom), link tested in a private window
+- [ ] No API key, `.env` or terminal on screen
+- [ ] Uploaded to YouTube or Loom as **Unlisted** (or Public), with the link tested in a private window
