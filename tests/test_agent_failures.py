@@ -187,3 +187,11 @@ def test_a_failed_receipt_is_not_shown():
         result={"status": "error", "receipt_number": "RC-0001"},
     )
     assert result_card([_recorded(), failed])["payment"]["receipt_number"] is None
+
+
+def test_the_prompt_forbids_inventing_optional_payment_details():
+    from app.agent import system_prompt
+
+    prompt = system_prompt()
+    assert "Never fill them in" in prompt
+    assert "payment method" in prompt
