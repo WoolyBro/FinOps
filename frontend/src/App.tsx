@@ -1,12 +1,8 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { api } from './lib/api';
 import { AgentStatus, Invoice, Payment } from './types';
 import { Sidebar } from './components/layout/Sidebar';
+import { DemoResetProvider } from './components/layout/DemoReset';
 import { ToastProvider, useToast } from './components/ui/Toast';
 import { NewInvoiceModal } from './components/modals/NewInvoiceModal';
 import { RecordPaymentModal } from './components/modals/RecordPaymentModal';
@@ -15,7 +11,7 @@ import { DocumentViewerModal, ViewedDocument } from './components/modals/Documen
 
 // Pages
 import { OverviewPage } from './pages/OverviewPage';
-import { AgentPage } from './pages/AgentPage';
+import { AgentPage, forgetConversation } from './pages/AgentPage';
 import { InvoicesPage } from './pages/InvoicesPage';
 import { InvoiceDetailPage } from './pages/InvoiceDetailPage';
 import { ClientsPage } from './pages/ClientsPage';
@@ -67,6 +63,9 @@ function MainApp() {
   // Key to force refresh of lists when data mutates
   const [refreshKey, setRefreshKey] = useState(0);
   const triggerRefresh = () => setRefreshKey((k) => k + 1);
+  // The agent page keeps its conversation across ledger changes; only a demo
+  // reset replaces it.
+  const [agentKey, setAgentKey] = useState(0);
 
   // Sync browser back/forward or simple URL hash
   useEffect(() => {
@@ -171,6 +170,7 @@ function MainApp() {
       case '/agent':
         return (
           <AgentPage
+            key={`agent-${agentKey}`}
             onNavigate={navigate}
             agentStatus={agentStatus}
             backendOnline={backendOnline}
@@ -242,7 +242,18 @@ function MainApp() {
     }
   };
 
+  const handleDemoReset = () => {
+    forgetConversation();
+    setAgentKey((k) => k + 1); // remount the agent page with an empty conversation
+    setDocumentViewer(null);
+    setRecordPaymentInvoice(null);
+    triggerRefresh();
+    refreshAgentStatus();
+    addToast('Demo data reset — the sample ledger is back to where it started');
+  };
+
   return (
+    <DemoResetProvider onReset={handleDemoReset} onError={addToast}>
     <div
       className="min-h-screen flex flex-col lg:flex-row"
       style={{ backgroundColor: 'var(--canvas)' }}
@@ -349,6 +360,7 @@ function MainApp() {
 
       <DocumentViewerModal document={documentViewer} onClose={closeDocument} />
     </div>
+    </DemoResetProvider>
   );
 }
 

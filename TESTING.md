@@ -11,14 +11,12 @@ python -m venv .venv
 .venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env              # then set GEMINI_API_KEY=your-key in .env
-python -m app.seed --data-dir data/demo
 ```
 
 Start the API, then the dashboard in a second terminal:
 
 ```bash
-# Windows PowerShell:  $env:FF_DATA_DIR="data/demo"; uvicorn app.api.main:app --port 8000
-FF_DATA_DIR=data/demo uvicorn app.api.main:app --port 8000
+uvicorn app.api.main:app --port 8000
 ```
 
 ```bash
@@ -26,6 +24,9 @@ cd frontend && npm install && npm run dev
 ```
 
 Open **http://localhost:5173**. The sidebar should read **Agent ready · Google Gemini**.
+
+Each browser gets its own private copy of the sample data, created on first
+visit. Your changes persist across refreshes and never affect anyone else.
 
 ## 2. Test the agent
 
@@ -59,9 +60,13 @@ Everything also works by hand:
 pytest -q
 ```
 
-Expected: **596 passed, 11 skipped**. No API key or network needed; the
+Expected: **610 passed, 11 skipped**. No API key or network needed; the
 skipped tests call a real model and only run with `pytest -m live`.
 
 ## Reset the demo data
 
-Stop the API, delete `data/demo`, and run `python -m app.seed --data-dir data/demo` again.
+Click **Reset demo data** at the top right of any page. It restores your
+browser's copy of the sample ledger (Rahul's ₹40,000 invoice unpaid again),
+removes documents generated since, and clears the agent conversation. Other
+browsers' copies are not touched, so you can run the tests above as many
+times as you like.

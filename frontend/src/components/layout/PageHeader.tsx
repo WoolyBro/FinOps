@@ -1,4 +1,5 @@
 import React from 'react';
+import { ResetDemoButton } from './DemoReset';
 
 type PageHeaderProps = {
   title: React.ReactNode;
@@ -29,11 +30,11 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           </div>
         )}
       </div>
-      {actions && (
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {actions}
-        </div>
-      )}
+      {/* Page actions first, then the demo reset in the far-right corner on every page. */}
+      <div className="flex flex-wrap items-center gap-2 shrink-0 ml-auto">
+        {actions}
+        <ResetDemoButton />
+      </div>
     </div>
   );
 };

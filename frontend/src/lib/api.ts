@@ -28,6 +28,41 @@ import type {
 /** Empty in development: Vite proxies /api to FastAPI on the same origin. */
 export const API_BASE: string = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
+/**
+ * This browser's demo sandbox: a private copy of the sample ledger on the
+ * server. Kept in localStorage so a refresh returns to the same copy — a
+ * payment recorded before the refresh is still there after it — while other
+ * browsers get their own. The server creates the copy the first time it sees
+ * the id, so a wiped server simply hands this id a fresh one.
+ */
+const SANDBOX_KEY = 'ff.sandbox';
+let memorySandbox: string | null = null;
+
+function newSandboxId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return 'sbx-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function sandboxId(): string {
+  try {
+    const stored = localStorage.getItem(SANDBOX_KEY);
+    if (stored && /^sbx-[0-9a-f]{32}$/.test(stored)) return stored;
+    const created = newSandboxId();
+    localStorage.setItem(SANDBOX_KEY, created);
+    return created;
+  } catch {
+    // Storage blocked (private mode on some browsers): one copy per page load.
+    memorySandbox ??= newSandboxId();
+    return memorySandbox;
+  }
+}
+
+/** A plain link cannot send a header, so document URLs name the sandbox in the query. */
+function withSandbox(path: string): string {
+  return `${API_BASE}${path}${path.includes('?') ? '&' : '?'}workspace=${sandboxId()}`;
+}
+
 function query(params: Record<string, string | number | null | undefined>): string {
   const q = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -42,7 +77,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-FF-Workspace': sandboxId(),
+        ...(options.headers || {}),
+      },
       cache: 'no-store',
     });
   } catch {
@@ -141,7 +180,7 @@ export const api = {
   getInvoiceDetail: (id: number) =>
     request<{ invoice: Invoice; payments: Payment[] }>(`/api/invoices/${id}`),
 
-  invoicePdfUrl: (id: number) => `${API_BASE}/api/invoices/${id}/pdf`,
+  invoicePdfUrl: (id: number) => withSandbox(`/api/invoices/${id}/pdf`),
 
   // --- payments ---------------------------------------------------------
 
@@ -165,7 +204,7 @@ export const api = {
   },
 
   /** Opening this issues the receipt if it does not exist yet — one number for life. */
-  receiptPdfUrl: (paymentId: number) => `${API_BASE}/api/payments/${paymentId}/receipt`,
+  receiptPdfUrl: (paymentId: number) => withSandbox(`/api/payments/${paymentId}/receipt`),
 
   // --- reminders --------------------------------------------------------
 
@@ -225,6 +264,14 @@ export const api = {
 
   resetChat: (sessionId: string) =>
     request<void>(`/api/chat/${sessionId}`, { method: 'DELETE' }),
+
+  // --- demo sandbox -----------------------------------------------------
+
+  /** Restore this browser's copy of the sample ledger. Nobody else's is touched. */
+  resetSandbox: () =>
+    post<{ status: string; client_count: number; invoice_count: number; payment_count: number }>(
+      '/api/sandbox/reset',
+    ),
 };
 
 /** Render a per-currency total list. Empty means nothing is owed. */
