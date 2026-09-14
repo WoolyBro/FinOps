@@ -40,6 +40,11 @@ const REFUSALS = new Set([
 // The conversation survives navigating away and back within this tab.
 let saved: { sessionId: string | null; transcript: Turn[] } = { sessionId: null, transcript: [] };
 
+/** Drop the remembered conversation, e.g. after the demo data is reset. */
+export function forgetConversation() {
+  saved = { sessionId: null, transcript: [] };
+}
+
 type AgentPageProps = {
   onNavigate: (path: string) => void;
   agentStatus: AgentStatus | null;

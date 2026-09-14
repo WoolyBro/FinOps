@@ -6,7 +6,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Strands Agents](https://img.shields.io/badge/Strands%20Agents-1.54-orange)
 ![React](https://img.shields.io/badge/React-19-61dafb)
-![Tests](https://img.shields.io/badge/tests-596%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-610%20passing-brightgreen)
 
 You tell it what happened, in your own words:
 
@@ -207,24 +207,26 @@ GEMINI_API_KEY=your-key-here
 
 `.env` is gitignored. Never commit a key.
 
-### 3. Seed a demo ledger
+### 3. Demo data: nothing to do
 
-```bash
-python -m app.seed --data-dir data/demo
-```
+The dashboard gives **each browser its own private copy of the sample
+ledger**, created on the first visit: 6 clients, 10 invoices and a realistic
+payment history, dated relative to today so it never goes stale. Changes
+persist across refreshes, so you can confirm a payment really landed, and no
+other visitor sees them.
 
-This creates 6 clients, 10 invoices and a realistic payment history, dated
-relative to today so the demo never goes stale. It writes to its own database
-and refuses to write into one that already has clients.
+**Reset demo data**, at the top right of every page, restores that browser's
+copy: Rahul's ₹40,000 invoice unpaid again, invoice numbering back to
+FF-0011, generated documents removed, agent conversation cleared. Other
+visitors' copies are untouched. Unused copies expire after 24 hours
+(`FF_SANDBOX_TTL_HOURS`), and at most 500 are kept (`FF_SANDBOX_MAX`).
+
+To seed a standalone database for the CLI instead: `python -m app.seed --data-dir data/demo`.
 
 ### 4. Run the API
 
 ```bash
-# macOS/Linux
-FF_DATA_DIR=data/demo uvicorn app.api.main:app --reload --port 8000
-
-# Windows PowerShell
-$env:FF_DATA_DIR="data/demo"; uvicorn app.api.main:app --reload --port 8000
+uvicorn app.api.main:app --reload --port 8000
 ```
 
 Interactive API docs: http://localhost:8000/docs
@@ -267,6 +269,7 @@ All settings are environment variables, usually set in `.env`.
 | `FF_CORS_ORIGINS` | localhost dev origins | Comma-separated allowed origins. `*` is refused |
 | `FF_GEMINI_THINKING` | `low` | Gemini thinking level: `minimal`, `low`, `medium`, `high`, or `off` |
 | `FF_SEED_DEMO` | off | `true` seeds the demo ledger at startup when the database is empty |
+| `FF_SANDBOX_TTL_HOURS` / `FF_SANDBOX_MAX` | `24` / `500` | Expiry and cap for per-browser demo copies |
 | `FF_STATIC_DIR` | `frontend/dist` | Built dashboard the API serves, if present |
 
 ## Model providers
@@ -339,7 +342,8 @@ carries the tool's own explanation. Full interactive docs are at `/docs`.
 | `GET` | `/api/reports/clients` | Per-client breakdown |
 | `GET` | `/api/reports/overdue` | Overdue invoices, most overdue first |
 | `GET` | `/api/reports/outstanding` | Every invoice with money owed |
-| `GET` | `/api/workspaces` | The available ledgers and what each holds |
+| `GET` | `/api/workspaces` | The shared ledgers and what each holds |
+| `POST` | `/api/sandbox/reset` | Restore this browser's demo copy (sent with `X-FF-Workspace`) |
 
 ## Project structure
 
@@ -378,13 +382,13 @@ deploy/
   iam/                  least-privilege IAM policies
 docs/
   AGENTCORE.md          deployment guide and storage limitations
-tests/                  596 offline tests + opt-in live-model tests
+tests/                  610 offline tests + opt-in live-model tests
 ```
 
 ## Testing
 
 ```bash
-pytest -q          # 596 tests. No credentials, no network, no spend.
+pytest -q          # 610 tests. No credentials, no network, no spend.
 ```
 
 The suite covers money parsing and formatting, invoice numbering, payment and
@@ -497,7 +501,7 @@ SQLite or Postgres).
 
 **Working today**
 
-- The full deterministic business layer: 22 tools, 596 passing tests
+- The full deterministic business layer: 22 tools, 610 passing tests
 - The dashboard, all ten screens wired to the live API with no mock data
 - The agent running live on Google Gemini through Strands, verified end to end: a read question produced the correct tool chain (`find_client → get_client_balance`) and the correct balance
 - Invoice and receipt PDFs

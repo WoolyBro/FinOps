@@ -25,18 +25,10 @@ ledger's sample data.)*
 
 ## Part 1 · Prepare (10 minutes, once)
 
-**1. Reset the demo data before every take.** This makes Rahul's ₹40,000
-invoice unpaid again. Run it from the `freelanceflow` folder, with the API
-window closed:
+**1. Start the app**, each command in its own PowerShell window, from the `freelanceflow` folder:
 
 ```bash
-Remove-Item -Recurse -Force data\video; .venv\Scripts\python.exe -m app.seed --data-dir data/video
-```
-
-**2. Start the app**, each command in its own PowerShell window:
-
-```bash
-$env:FF_DATA_DIR="data/video"; .venv\Scripts\python.exe -m uvicorn app.api.main:app --port 8000
+.venv\Scripts\python.exe -m uvicorn app.api.main:app --port 8000
 ```
 
 ```bash
@@ -45,6 +37,11 @@ cd frontend; npm run dev
 
 Open **http://localhost:5173**. The bottom of the sidebar must say **Agent
 ready · Google Gemini · gemini-3.5-flash-lite**.
+
+**2. Reset the demo data before every take.** Click **Reset demo data** at
+the top right of any page and confirm. Rahul's ₹40,000 invoice is unpaid
+again and the agent's conversation is cleared. Only this browser's copy is
+affected.
 
 **3. Make the screen clean.**
 - Chrome or Edge, full screen (F11), zoom 110%, one tab, bookmarks bar hidden.
@@ -55,7 +52,7 @@ ready · Google Gemini · gemini-3.5-flash-lite**.
 **4. Respect the free tier.** Gemini's free tier limits requests per
 minute. **Wait about 30 seconds after each agent reply before typing the
 next message**, then cut the waiting in editing. If the page ever says
-*"free-tier limit reached"*, wait a minute, reset the data and restart the take.
+*"free-tier limit reached"*, wait a minute, click **Reset demo data** and restart the take.
 
 **5. Record with Clipchamp** (built into Windows 11): *Record & create →
 Screen and camera*, choose the browser window, microphone on.
@@ -205,7 +202,7 @@ in 30 days.)*
 ### Scene 11 · Built to be trusted · 4:15–4:30
 **Screen:** slide 6
 
-> "Five hundred and ninety-six automated tests. Balances derived from the
+> "Six hundred and ten automated tests. Balances derived from the
 > payment ledger, never stored. Overpayments refused, duplicates flagged, and
 > nothing sent without approval."
 
@@ -221,12 +218,12 @@ in 30 days.)*
 
 | On screen | What to do |
 |---|---|
-| "free-tier limit reached" | Stop. Wait 60 seconds, reset the data, restart the take |
+| "free-tier limit reached" | Stop. Wait 60 seconds, click **Reset demo data**, restart the take |
 | "temporary error… on Google's side" | Wait 10 seconds, send the same message again. If nothing was recorded, keep recording |
 | The agent asks a question ("Which invoice?") | Answer it on camera ("FF-0005"). Asking instead of guessing is the point, so keep it |
 | "Agent unavailable" in the sidebar | The key didn't load. Check `.env`, restart the API window |
 | A reply takes over 30 seconds | Keep recording, then cut the wait |
-| Anything else | Reset the data and redo the take |
+| Anything else | Click **Reset demo data** and redo the take |
 
 ## Part 4 · Before you upload
 

@@ -247,6 +247,18 @@ class AgentService:
         with self._lock:
             return self._sessions.pop(session_id, None) is not None
 
+    def reset_workspace(self, workspace_id: str) -> int:
+        """Forget every conversation about one workspace. Returns how many.
+
+        Used when a sandbox is reset: a conversation that remembers "₹25,000
+        left" would contradict a ledger that is back to ₹40,000.
+        """
+        with self._lock:
+            doomed = [k for k, s in self._sessions.items() if s.workspace == workspace_id]
+            for key in doomed:
+                del self._sessions[key]
+            return len(doomed)
+
     def history(self, session_id: str) -> list[dict]:
         with self._lock:
             session = self._sessions.get(session_id)
